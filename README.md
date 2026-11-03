@@ -143,7 +143,9 @@ You do this **once per phone**. There is no PIN.
 1. The phone must be on the **same Wi-Fi** as the laptop (not on mobile data, not on a "guest" network).
 2. In the black window there is a link like `http://192.168.1.23:8765/#connect=…`. It is already copied.
    **Paste it (Ctrl+V) into an e-mail or a message to yourself** (Gmail, Viber, WhatsApp…) and send it.
-3. **Open the link on your phone.** The page says "Connected to …" and the remote opens.
+3. **Open the link on your phone**, in the browser you will use for the remote (on iPhone: Safari). If your e-mail
+   app opens links in its own small browser, long-press the link → **Copy**, and paste it into the address bar of
+   your normal browser. The page says "Connected to …" and the remote opens.
 4. **Add the page to your home screen**, so it opens like an app:
    - Android (Chrome): menu **⋮** → **Add to Home screen**
    - iPhone (Safari): the share button **□↑** → **Add to Home Screen**
@@ -365,6 +367,12 @@ on the laptop — the remote never runs hidden.
 **"Connect this phone" appears although the phone was connected:** the phone was disconnected (from Settings,
 with **D**, or after 30 days unused), or the laptop got a new address from the router. Get a new link (**L** + **Enter**).
 To keep the address always the same, set a "DHCP reservation" for the laptop in your router.
+
+**The phone keeps forgetting the connection:** the connection is saved in the phone's browser. Private mode, or a
+browser that deletes its data (for example the flame button in DuckDuckGo), deletes it too. Open the link in the browser
+you use for the remote (on iPhone: Safari, then Add to Home Screen) and don't use private mode for it. In an e-mail app,
+a tap on a link can open it in the app's own small browser — then long-press the link, choose **Copy**, and paste it into
+the address bar of your normal browser.
 
 **"No connection to the laptop":** the remote is stopped, the laptop is asleep (or its lid is closed), or the
 phone is on another network.
