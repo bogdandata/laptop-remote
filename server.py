@@ -254,6 +254,23 @@ def laptop_addresses():
     return addresses or ["127.0.0.1"]
 
 
+def already_running(port):
+    """True if something on this laptop already answers on the port (e.g. another copy of the remote)."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+class RemoteServer(ThreadingHTTPServer):
+    daemon_threads = True
+    # On Windows, SO_REUSEADDR would let a second copy of the server listen on the
+    # same port at the same time, without any error. Windows does not need it to
+    # restart the server right away, so it is only used on other systems.
+    allow_reuse_address = not actions.ON_WINDOWS
+
+
 def is_home_network(ip):
     """Only devices on the home (private) network are allowed."""
     try:
@@ -499,14 +516,18 @@ def main():
     data = config(first_time=True)  # again, because the PIN may have just been written to the file
     port = data["port"]
 
+    if already_running(port):
+        print(f"\nERROR: the remote is already running on this laptop (port {port}).")
+        print("Use the window (or VS Code terminal) where it is already running,")
+        print("or stop it there first (Ctrl+C or close the window), then start it again.")
+        return 1
     try:
-        server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+        server = RemoteServer(("0.0.0.0", port), Handler)
     except OSError as e:
         print(f"\nERROR: the server cannot start on port {port} ({e}).")
-        print("It is probably already running in another window. Close that window,")
+        print("Another program is using this port. Close it,")
         print("or change the port number in config.ini.")
         return 1
-    server.daemon_threads = True
     threading.Thread(target=_writer, daemon=True).start()
 
     addresses = laptop_addresses()
