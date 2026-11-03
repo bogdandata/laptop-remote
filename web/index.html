@@ -241,12 +241,19 @@
       options.headers["Content-Type"] = "application/json";
       options.body = JSON.stringify(body);
     }
+    // If the laptop does not answer (the remote is stopped, the laptop is asleep, another
+    // Wi-Fi...), stop waiting after a few seconds. Typing a long text can take longer.
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), body && body.command === "type" ? 60000 : 8000) : 0;
+    if (controller) options.signal = controller.signal;
     let res;
     try {
       res = await fetch(path, options);
     } catch (e) {
       $("status").className = "status error";
-      throw new Error("No connection to the laptop. Is the server running, and are you on the same Wi-Fi?");
+      throw new Error("No connection to the laptop. Is the remote running on it, and are you on the same Wi-Fi?");
+    } finally {
+      clearTimeout(timer);
     }
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
