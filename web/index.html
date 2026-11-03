@@ -120,13 +120,16 @@
   .hint { color: var(--muted); font-size: 13px; margin: 10px 4px 0; }
 
   /* Touchpad */
-  #pad {
-    height: 46vh; min-height: 220px; border-radius: 16px; background: var(--bg);
-    border: 1px dashed var(--border); touch-action: none; user-select: none; -webkit-user-select: none;
+  .pad {
+    border-radius: 16px; background: var(--bg);
+    border: 1px dashed var(--border); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
     display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted);
-    font-size: 14px; padding: 16px; line-height: 1.6;
+    font-size: 13px; padding: 12px; line-height: 1.5;
   }
-  #pad.active { border-color: var(--accent); }
+  .pad.active { border-color: var(--accent); }
+  #pad { height: 46vh; min-height: 220px; font-size: 14px; }
+  #screenPad { height: 24vh; min-height: 140px; margin-top: 12px; }
+  .mouse-row { margin-top: 10px; }
 
   /* Phones list */
   .phones { list-style: none; margin: 0 0 4px; padding: 0; }
@@ -187,12 +190,16 @@
   #confirmYes { background: var(--red); border-color: var(--red); color: #fff; }
   #confirmYes.safe { background: var(--accent); border-color: var(--accent); }
 
-  /* Landscape phone on the Screen tab: as much picture as possible */
+  /* Phone turned sideways: the picture on the left, the touchpad on the right */
   @media (orientation: landscape) and (max-height: 520px) {
     body { max-width: none; padding-top: 8px; }
-    body.tab-screen header { display: none; }
-    body.tab-screen #screenImg { max-height: calc(100vh - var(--nav-height) - 90px); width: auto; }
+    body.tab-screen header, body.tab-touchpad header { display: none; }
     body.tab-screen .hint { display: none; }
+    .control { display: grid; grid-template-columns: minmax(0, 1fr) 34%; gap: 12px; align-items: start; }
+    body.tab-screen #screenImg { max-height: calc(100vh - var(--nav-height) - 96px); width: auto; }
+    #screenPad { height: calc(100vh - var(--nav-height) - 168px); min-height: 90px; margin-top: 0; }
+    body.tab-screen .scroll-row, body.tab-screen .screen-info { display: none; }  /* scroll with 2 fingers */
+    #pad { height: calc(100vh - var(--nav-height) - 150px); min-height: 140px; }
   }
 </style>
 </head>
@@ -298,31 +305,43 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 3v2h2V9zm4 0v2h2V9zm4 0v2h2V9zm4 0v2h2V9zM5 13v2h2v-2zm4 0v2h6v-2zm8 0v2h2v-2z"/></svg>
         </button>
       </div>
-      <div class="screen-area">
-        <div class="screen-box" id="screenBox" hidden>
-          <img id="screenImg" alt="Laptop screen" draggable="false">
-          <div id="cursorDot" hidden></div>
+      <div class="control">
+        <div>
+          <div class="screen-area">
+            <div class="screen-box" id="screenBox" hidden>
+              <img id="screenImg" alt="Laptop screen" draggable="false">
+              <div id="cursorDot" hidden></div>
+            </div>
+            <div id="screenNote">Loading the screen…</div>
+          </div>
+          <div class="screen-info"><span id="screenState">—</span><span id="screenFps"></span></div>
         </div>
-        <div id="screenNote">Loading the screen…</div>
+        <div>
+          <div class="pad" id="screenPad">Touchpad · slide = move the mouse · tap = click<br>2 fingers: tap = right click · slide = scroll</div>
+          <div class="row mouse-row">
+            <button class="small" data-mouse="left">Left click</button>
+            <button class="small" data-mouse="hold">Hold left</button>
+            <button class="small" data-mouse="right">Right click</button>
+          </div>
+          <div class="row two mouse-row scroll-row">
+            <button class="small" data-scroll="360">▲ Scroll up</button>
+            <button class="small" data-scroll="-360">▼ Scroll down</button>
+          </div>
+        </div>
       </div>
-      <div class="screen-info"><span id="screenState">—</span><span id="screenFps"></span></div>
-      <div class="row two" style="margin-top:10px">
-        <button class="small" data-scroll="360">▲ Scroll up</button>
-        <button class="small" data-scroll="-360">▼ Scroll down</button>
-      </div>
-      <p class="hint">Tap = click · Hold = right click · Pinch to zoom · Turn the phone sideways for a bigger picture.</p>
+      <p class="hint">On the picture: tap = click right there · hold = right click · pinch to zoom. Turn the phone sideways: picture on the left, touchpad on the right.</p>
     </section>
     <div id="slot-screen"></div>
   </div>
 
-  <!-- Mouse -->
-  <div class="tab" id="tab-mouse" hidden>
+  <!-- Touchpad (big): for when you look at the laptop itself -->
+  <div class="tab" id="tab-touchpad" hidden>
     <section>
-      <div id="pad">Move: slide 1 finger<br>Click: tap · Right click: tap with 2 fingers<br>Scroll: slide 2 fingers</div>
-      <div class="row" style="margin-top:10px">
-        <button class="small" id="leftClick">Left click</button>
-        <button class="small" id="holdLeft">Hold left</button>
-        <button class="small" id="rightClick">Right click</button>
+      <div class="pad" id="pad">Move: slide 1 finger<br>Click: tap · Right click: tap with 2 fingers<br>Scroll: slide 2 fingers</div>
+      <div class="row mouse-row">
+        <button class="small" data-mouse="left">Left click</button>
+        <button class="small" data-mouse="hold">Hold left</button>
+        <button class="small" data-mouse="right">Right click</button>
       </div>
       <div class="toolbar" style="margin:10px 0 0">
         <div class="segmented" id="speed" role="group" aria-label="Mouse speed">
@@ -330,17 +349,12 @@
           <button data-speed="normal">Normal</button>
           <button data-speed="fast">Fast</button>
         </div>
-        <button id="mouseKeyboard" aria-label="Show the keyboard">
+        <button id="touchpadKeyboard" aria-label="Show the keyboard">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 3v2h2V9zm4 0v2h2V9zm4 0v2h2V9zm4 0v2h2V9zM5 13v2h2v-2zm4 0v2h6v-2zm8 0v2h2v-2z"/></svg>
         </button>
       </div>
     </section>
-    <div id="slot-mouse"></div>
-  </div>
-
-  <!-- Keyboard -->
-  <div class="tab" id="tab-keyboard" hidden>
-    <div id="slot-keyboard"></div>
+    <div id="slot-touchpad"></div>
   </div>
 
   <!-- Settings -->
@@ -399,11 +413,8 @@
     <button data-tab="screen" aria-label="Screen">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v9h16V6z"/></svg><span>Screen</span>
     </button>
-    <button data-tab="mouse" aria-label="Mouse">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2v7H5V8a6 6 0 0 1 6-6zm2 0a6 6 0 0 1 6 6v1h-6zM5 11h14v5a7 7 0 0 1-14 0z"/></svg><span>Mouse</span>
-    </button>
-    <button data-tab="keyboard" aria-label="Keyboard">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 3v2h2V9zm4 0v2h2V9zm4 0v2h2V9zm4 0v2h2V9zM5 13v2h2v-2zm4 0v2h6v-2zm8 0v2h2v-2z"/></svg><span>Keyboard</span>
+    <button data-tab="touchpad" aria-label="Touchpad">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2v7H5V8a6 6 0 0 1 6-6zm2 0a6 6 0 0 1 6 6v1h-6zM5 11h14v5a7 7 0 0 1-14 0z"/></svg><span>Touchpad</span>
     </button>
     <button data-tab="settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.6 2l.5 2.6a8 8 0 0 1 2 1.2l2.5-.9 1.6 2.8-2 1.7a8 8 0 0 1 0 2.4l2 1.7-1.6 2.8-2.5-.9a8 8 0 0 1-2 1.2l-.5 2.6h-3.2l-.5-2.6a8 8 0 0 1-2-1.2l-2.5.9-1.6-2.8 2-1.7a8 8 0 0 1 0-2.4l-2-1.7 1.6-2.8 2.5.9a8 8 0 0 1 2-1.2l.5-2.6zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg><span>Settings</span>
@@ -569,8 +580,9 @@
   });
 
   // ---------- tabs ----------
-  const keyboardSlots = { screen: "slot-screen", mouse: "slot-mouse", keyboard: "slot-keyboard" };
-  const keyboardOpen = { screen: false, mouse: false, keyboard: true };
+  const keyboardSlots = { screen: "slot-screen", touchpad: "slot-touchpad" };
+  const keyboardOpen = { screen: false, touchpad: true };
+  const PAD_TABS = ["screen", "touchpad"];
 
   function placeKeyboard() {
     const kb = $("keyboard");
@@ -582,12 +594,13 @@
       kb.hidden = true;
     }
     $("screenKeyboard").classList.toggle("on", keyboardOpen.screen);
-    $("mouseKeyboard").classList.toggle("on", keyboardOpen.mouse);
+    $("touchpadKeyboard").classList.toggle("on", keyboardOpen.touchpad);
   }
 
   function showTab(name) {
+    if (name === "mouse" || name === "keyboard") name = "touchpad";  // tabs of the first version 2
     if (!$("tab-" + name)) name = "remote";
-    if (currentTab === "mouse" && name !== "mouse") releaseHold();
+    if (PAD_TABS.includes(currentTab) && !PAD_TABS.includes(name)) releaseHold();
     currentTab = name;
     store.set("tab", name);
     document.querySelectorAll(".tab").forEach((t) => (t.hidden = t.id !== "tab-" + name));
@@ -601,7 +614,7 @@
   }
   document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
   $("screenKeyboard").addEventListener("click", () => { keyboardOpen.screen = !keyboardOpen.screen; placeKeyboard(); });
-  $("mouseKeyboard").addEventListener("click", () => { keyboardOpen.mouse = !keyboardOpen.mouse; placeKeyboard(); });
+  $("touchpadKeyboard").addEventListener("click", () => { keyboardOpen.touchpad = !keyboardOpen.touchpad; placeKeyboard(); });
 
   function stopEverything() {
     stopHold();
@@ -902,7 +915,7 @@
     }
   }
 
-  const pad = $("pad");
+  function attachPad(pad) {
   const fingers = new Map();
   let gesture = null;
   pad.addEventListener("pointerdown", (e) => {
@@ -943,26 +956,33 @@
   pad.addEventListener("pointerup", fingerUp);
   pad.addEventListener("pointercancel", fingerUp);
   pad.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+  attachPad($("screenPad"));  // under the screen picture
+  attachPad($("pad"));        // the big one on the Touchpad tab
 
-  $("leftClick").addEventListener("click", () => { vibrate(); command({ command: "click", button: "left" }, true); });
-  $("rightClick").addEventListener("click", () => { vibrate(); command({ command: "click", button: "right" }, true); });
+  // Mouse buttons (the same on the Screen and the Touchpad tab)
   let holding = false;
-  $("holdLeft").addEventListener("click", async () => {
+  function showHolding() {
+    document.querySelectorAll('[data-mouse="hold"]').forEach((b) => {
+      b.classList.toggle("on", holding);
+      b.textContent = holding ? "Let go" : "Hold left";
+    });
+  }
+  document.querySelectorAll("[data-mouse]").forEach((b) => b.addEventListener("click", async () => {
     vibrate();
+    const what = b.dataset.mouse;
+    if (what !== "hold") { command({ command: "click", button: what }, true); return; }
     holding = !holding;
-    $("holdLeft").classList.toggle("on", holding);
-    $("holdLeft").textContent = holding ? "Let go" : "Hold left";
+    showHolding();
     if (!(await command({ command: "mouse_button", button: "left", pressed: holding }, true)) && holding) {
       holding = false;
-      $("holdLeft").classList.remove("on");
-      $("holdLeft").textContent = "Hold left";
+      showHolding();
     }
-  });
+  }));
   function releaseHold() {
     if (!holding) return;
     holding = false;
-    $("holdLeft").classList.remove("on");
-    $("holdLeft").textContent = "Hold left";
+    showHolding();
     if (key) command({ command: "mouse_button", button: "left", pressed: false }, true);
   }
 

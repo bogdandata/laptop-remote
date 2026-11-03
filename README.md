@@ -10,9 +10,8 @@ its browser (Chrome, Safari…). There is **no PIN**: you connect a phone once w
 | Tab on the phone | What you can do |
 |---|---|
 | **Remote** | Music (previous / play-pause / next) · Volume (down / mute / up, hold to keep changing) · your apps and websites from `config.ini` · Lock screen · Restart · Shut down (restart and shut down ask first) |
-| **Screen** | A live picture of the laptop screen. Tap = click there · Hold = right click · Scroll buttons · Pinch to zoom |
-| **Mouse** | The phone becomes a touchpad: slide to move, tap to click, tap with 2 fingers for a right click, slide 2 fingers to scroll, "Hold left" to drag |
-| **Keyboard** | Esc, Tab, Win, Alt+Tab, arrows, Backspace, Enter, Ctrl+C, Ctrl+V, and typing any text into the active window |
+| **Screen** | A live picture of the laptop screen, and **a touchpad right under it**: tap the picture = click there, hold = right click; slide on the touchpad = move the mouse; Left / Hold / Right click and Scroll buttons; a keyboard button for keys and typing |
+| **Touchpad** | A big touchpad for when you look at the laptop (or a TV) itself, with mouse buttons, speed, keys (Esc, Tab, Win, Alt+Tab, arrows, Backspace, Enter, Ctrl+C, Ctrl+V) and typing text |
 | **Settings** | Phones connected to the laptop · Disconnect this phone · Disconnect all phones · Stop the remote |
 
 All you need is Python. No extra packages are required (no `pip install`). Keys and the mouse are
@@ -175,25 +174,24 @@ About the code:
 - Volume: one tap = one step (2%). Hold **Volume down** or **Volume up** to keep changing it. **Mute** again turns the sound back on.
 - Restart and Shut down ask "Are you sure?" first, then happen after 5 seconds.
 
-**Screen tab** — a live picture of the laptop's main screen.
-- **Tap** on the picture = left click exactly there. **Hold** = right click. Two quick taps = double click.
-- **Scroll up / Scroll down** buttons turn the mouse wheel.
-- **Fast / Normal / Sharp** picks the picture quality. Fast is smoother on a slow Wi-Fi, Sharp shows small text better.
-  Expect a few pictures per second, like a slow video — fine for clicking, not for films.
-- **Pause** stops the picture. The picture also stops by itself when you leave the tab or lock the phone, so it doesn't use data.
-- Pinch to zoom; turn the phone sideways for a bigger picture.
-- The keyboard button shows the keys and the text box under the picture.
-- The blue circle shows where the laptop's mouse cursor is.
+**Screen tab** — see the laptop and control it, all in one place.
+- At the top: a live picture of the laptop's main screen. The blue circle shows where the laptop's mouse cursor is.
+- **On the picture:** tap = left click exactly there · hold = right click · two quick taps = double click · pinch to zoom.
+- **Right under the picture: a touchpad.** Slide 1 finger = move the mouse · tap = click where the cursor is ·
+  tap with 2 fingers = right click · slide 2 fingers = scroll.
+- Under the touchpad: **Left click**, **Hold left** (keeps the button pressed so you can drag; tap **Let go** when done),
+  **Right click**, **Scroll up**, **Scroll down**.
+- **Fast / Normal / Sharp** picks the picture quality (Fast is smoother on a slow connection, Sharp shows small text
+  better). Expect a few pictures per second, like a slow video — fine for clicking, not for films.
+- **Pause** stops the picture. It also stops by itself when you leave the tab or lock the phone, so it doesn't use data.
+- The **keyboard** button shows the keys and the text box under it.
+- **Turn the phone sideways:** the picture is on the left and the touchpad on the right.
 
-**Mouse tab** — the phone is a touchpad.
-- Slide 1 finger = move the cursor · Tap = left click · Tap with 2 fingers = right click · Slide 2 fingers = scroll.
-- **Hold left** keeps the left button pressed, so you can drag (move a window, select text). Tap **Let go** when you are done.
-- **Slow / Normal / Fast** sets the cursor speed.
-
-**Keyboard tab** — special keys and typing.
-- Keys: Esc, Tab, Win (Start menu), Alt+Tab (switch window), arrows, Backspace, Enter, Ctrl+C (copy), Ctrl+V (paste).
-- **Type text**: first click into the right place on the laptop (or tap it on the Screen tab), then write the text on the
-  phone and tap **Type**. "Press Enter at the end" presses Enter after the text. Accented letters and emoji work too.
+**Touchpad tab** — a big touchpad, for when you look at the laptop (or a TV connected to it) and not at the phone.
+- The same gestures and buttons as above, plus **Slow / Normal / Fast** cursor speed.
+- Under it are the **keys** (Esc, Tab, Win = Start menu, Alt+Tab = switch window, arrows, Backspace, Enter, Ctrl+C = copy,
+  Ctrl+V = paste) and **Type text**: click into the right place on the laptop first, then write the text on the phone and
+  tap **Type** ("Press Enter at the end" presses Enter after it). Accented letters and emoji work too.
 
 **Settings tab** — which phones are connected, disconnecting, stopping (see section 6).
 
