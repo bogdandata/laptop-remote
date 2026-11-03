@@ -347,8 +347,15 @@ The exact error is shown on the phone and in the black window.
 **"Python is not installed, or it was not added to PATH":** repeat the installation from
 [section 1](#1-install-python). With the classic installer, make sure to tick "Add python.exe to PATH".
 
-**"the server cannot start on port 8765":** the server is already running in another black window.
-Close one of them. Or change the `port` in `config.ini`.
+**"the remote is already running on this laptop":** it is already running in another black window or
+VS Code terminal. Use that one, or stop it there first (Ctrl+C or close the window).
+
+**"the server cannot start on port 8765":** another program is using this port. Close it, or change the
+`port` in `config.ini`.
+
+**The phone can still control the laptop after you stopped the server:** another copy is still running
+somewhere (e.g. a minimized black window). Press **Ctrl+Shift+Esc** to open Task Manager, click each
+**Python** entry and click **End task**.
 
 **You started a shutdown by accident:** shut down and restart begin after 5 seconds. During that time,
 on the laptop press **Windows + R**, type `shutdown /a` and press **Enter** to cancel.
