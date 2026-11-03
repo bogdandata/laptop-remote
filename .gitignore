@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+# connected phones (created on the laptop, never upload it)
+devices.json
+devices.tmp

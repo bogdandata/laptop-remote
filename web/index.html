@@ -7,7 +7,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Remote">
 <link rel="icon" href="data:,">
 <title>Laptop Remote</title>
 <style>
@@ -23,17 +22,20 @@
     --red: #e5534b;
     --orange: #e49b3b;
     --border: #2f3742;
+    --nav-height: 64px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     font-size: 17px; line-height: 1.35;
-    padding: max(14px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom));
+    padding: max(14px, env(safe-area-inset-top)) 14px calc(var(--nav-height) + 20px + env(safe-area-inset-bottom));
     max-width: 560px; margin: 0 auto;
   }
+  [hidden] { display: none !important; }
+
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 2px 14px; }
-  header h1 { font-size: 20px; margin: 0; }
+  header h1 { font-size: 20px; margin: 0; overflow-wrap: anywhere; }
   header small { color: var(--muted); display: block; font-size: 13px; margin-top: 2px; }
   .status { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
   .status.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
@@ -41,9 +43,11 @@
 
   section { background: var(--card); border-radius: 18px; padding: 14px; margin-bottom: 14px; }
   section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px 4px; font-weight: 600; }
+  section p { margin: 0 4px 10px; color: var(--muted); font-size: 15px; }
 
   .row { display: grid; gap: 10px; grid-template-columns: repeat(3, 1fr); }
   .row.two { grid-template-columns: repeat(2, 1fr); }
+  .row.four { grid-template-columns: repeat(4, 1fr); gap: 8px; }
 
   button {
     font: inherit; color: var(--text); background: var(--button);
@@ -63,6 +67,9 @@
   button.primary span { color: #e6f0ff; }
   button.danger { color: var(--red); }
   button.warn { color: var(--orange); }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.small { min-height: 52px; font-size: 15px; font-weight: 600; padding: 6px; }
+  button.wide { width: 100%; min-height: 56px; flex-direction: row; font-weight: 600; margin-top: 10px; }
 
   .programs { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); }
   .programs button { min-height: 66px; font-size: 16px; font-weight: 600; padding: 10px; text-align: center; word-break: break-word; }
@@ -70,39 +77,101 @@
   .notes { color: var(--orange); font-size: 13px; margin: 10px 4px 0; }
   .notes:empty { display: none; }
 
-  textarea, input[type=text] {
+  textarea {
     width: 100%; font: inherit; font-size: 18px; color: var(--text);
     background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+    min-height: 96px; resize: vertical;
   }
-  textarea { min-height: 110px; resize: vertical; }
-  textarea:focus, input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .options { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
   .options label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
   .options input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--accent); }
   .options button { min-height: 56px; flex-direction: row; padding: 0 24px; font-weight: 600; }
+  .keys { margin-bottom: 12px; }
 
-  /* PIN screen */
-  #pinScreen { display: none; min-height: 80vh; flex-direction: column; justify-content: center; }
-  #pinScreen.visible { display: flex; }
-  #pinScreen h1 { font-size: 24px; margin: 0 0 6px; }
-  #pinScreen p { color: var(--muted); margin: 0 0 18px; }
-  #pinInput { text-align: center; font-size: 30px; letter-spacing: .3em; }
-  #pinScreen button { width: 100%; margin-top: 12px; min-height: 58px; font-weight: 600; }
-  #pinError { color: var(--red); min-height: 24px; margin-top: 12px; text-align: center; }
-  #main { display: none; }
-  #main.visible { display: block; }
+  /* Segmented choice (quality, speed) */
+  .segmented { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 3px; gap: 3px; }
+  .segmented button { flex: 1; min-height: 40px; border: none; border-radius: 9px; background: transparent; font-size: 14px; color: var(--muted); padding: 4px; }
+  .segmented button.on { background: var(--button-pressed); color: var(--text); }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar .segmented { flex: 1; }
+  .toolbar > button { min-height: 46px; min-width: 46px; padding: 0 10px; flex-direction: row; font-size: 14px; border-radius: 12px; }
+  .toolbar > button svg { width: 24px; height: 24px; }
+
+  /* Screen */
+  .screen-area { display: flex; justify-content: center; background: #000; border-radius: 12px; overflow: hidden; min-height: 160px; align-items: center; }
+  .screen-box { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+  #screenImg {
+    display: block; max-width: 100%; height: auto; touch-action: manipulation;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none;
+  }
+  #cursorDot {
+    position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+    border: 2px solid #fff; background: rgba(79, 156, 249, .55); box-shadow: 0 0 4px #000; pointer-events: none;
+  }
+  .ripple {
+    position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%;
+    border: 3px solid #fff; pointer-events: none; animation: ripple .45s ease-out forwards;
+  }
+  .ripple.right { border-color: var(--orange); }
+  @keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+  #screenNote { color: var(--muted); font-size: 15px; padding: 30px 16px; text-align: center; line-height: 1.4; }
+  .screen-info { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin: 8px 4px 0; }
+  .hint { color: var(--muted); font-size: 13px; margin: 10px 4px 0; }
+
+  /* Touchpad */
+  #pad {
+    height: 46vh; min-height: 220px; border-radius: 16px; background: var(--bg);
+    border: 1px dashed var(--border); touch-action: none; user-select: none; -webkit-user-select: none;
+    display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted);
+    font-size: 14px; padding: 16px; line-height: 1.6;
+  }
+  #pad.active { border-color: var(--accent); }
+
+  /* Phones list */
+  .phones { list-style: none; margin: 0 0 4px; padding: 0; }
+  .phones li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: 15px; }
+  .phones li:last-child { border-bottom: none; }
+  .phones small { color: var(--muted); }
+  .tag { color: var(--green); font-size: 13px; white-space: nowrap; }
+
+  /* Welcome (not connected) */
+  #welcome { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; }
+  #welcome h1 { font-size: 24px; margin: 0 0 8px; }
+  #welcome ol { color: var(--muted); padding-left: 22px; margin: 0 0 12px; }
+  #welcome li { margin-bottom: 8px; }
+  #welcome b { color: var(--text); }
+  #welcomeMessage { color: var(--orange); margin: 0 0 14px; min-height: 1em; }
+  #welcomeMessage:empty { display: none; }
+
+  /* Bottom navigation */
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: rgba(17, 20, 24, .96); border-top: 1px solid var(--border);
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+    display: flex; justify-content: center;
+  }
+  nav .tabs { display: flex; width: 100%; max-width: 560px; }
+  nav button {
+    flex: 1; min-height: var(--nav-height); background: none; border: none; border-radius: 12px;
+    color: var(--muted); padding: 4px 2px; gap: 2px;
+  }
+  nav button svg { width: 26px; height: 26px; }
+  nav button span { font-size: 11px; color: inherit; }
+  nav button.on { color: var(--accent); background: rgba(79, 156, 249, .14); border-color: transparent; }
+  nav button:active { transform: none; }
 
   /* Short messages */
   #toast {
-    position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translate(-50%, 30px);
+    position: fixed; left: 50%; bottom: calc(var(--nav-height) + 22px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
     background: #2b333e; color: var(--text); padding: 12px 18px; border-radius: 12px;
     width: max-content; max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: .2s; text-align: center;
-    box-shadow: 0 6px 24px rgba(0,0,0,.4); z-index: 20;
+    box-shadow: 0 6px 24px rgba(0,0,0,.4); z-index: 20; font-size: 16px;
   }
   #toast.visible { opacity: 1; transform: translate(-50%, 0); }
   #toast.error { background: #6a2724; }
 
-  /* Confirmation for shut down and restart */
+  /* Confirmation */
   #confirm { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: flex-end; justify-content: center; padding: 16px; z-index: 10; }
   #confirm.visible { display: flex; }
   #confirm .box { background: var(--card); border-radius: 20px; padding: 20px; width: 100%; max-width: 520px; margin-bottom: env(safe-area-inset-bottom); }
@@ -110,96 +179,224 @@
   #confirm p { margin: 0 0 18px; color: var(--muted); }
   #confirm .row button { min-height: 62px; font-weight: 600; }
   #confirmYes { background: var(--red); border-color: var(--red); color: #fff; }
+  #confirmYes.safe { background: var(--accent); border-color: var(--accent); }
 
-  .link { background: none; border: none; color: var(--muted); min-height: 0; font-size: 14px; padding: 8px; margin: 8px auto 0; text-decoration: underline; }
+  /* Landscape phone on the Screen tab: as much picture as possible */
+  @media (orientation: landscape) and (max-height: 520px) {
+    body { max-width: none; padding-top: 8px; }
+    body.tab-screen header { display: none; }
+    body.tab-screen #screenImg { max-height: calc(100vh - var(--nav-height) - 90px); width: auto; }
+    body.tab-screen .hint { display: none; }
+  }
 </style>
 </head>
 <body>
 
-<!-- ===== PIN ===== -->
-<div id="pinScreen">
-  <h1>Laptop Remote</h1>
-  <p>Enter the PIN shown in the black window on the laptop.</p>
-  <form id="pinForm" autocomplete="off">
-    <input id="pinInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="12"
-           autocomplete="off" autocorrect="off" spellcheck="false" placeholder="PIN" aria-label="PIN">
-    <button type="submit" class="primary">Connect</button>
-  </form>
-  <div id="pinError" role="alert"></div>
+<!-- ===== NOT CONNECTED ===== -->
+<div id="welcome" hidden>
+  <h1>Connect this phone</h1>
+  <p id="welcomeMessage"></p>
+  <ol>
+    <li>On the laptop, start <b>Laptop Remote</b> (double-click <b>start.bat</b>).</li>
+    <li>In its window, type <b>L</b> and press <b>Enter</b>. A link appears and is copied.</li>
+    <li>Send the link to yourself (e-mail, Viber, WhatsApp…) and open it on this phone.</li>
+  </ol>
+  <p class="hint">A link works only once and only for 15 minutes. After that this phone stays connected, with no PIN.</p>
+  <button class="wide" id="retry">Try again</button>
 </div>
 
-<!-- ===== MAIN SCREEN ===== -->
-<div id="main">
+<!-- ===== APP ===== -->
+<div id="app" hidden>
   <header>
     <div>
-      <h1>Laptop Remote</h1>
-      <small id="laptopName">connecting…</small>
+      <h1 id="laptopName">Laptop</h1>
+      <small id="laptopInfo">connecting…</small>
     </div>
     <div class="status" id="status" title="Connection to the laptop"></div>
   </header>
 
-  <section>
-    <h2>Music</h2>
-    <div class="row">
-      <button data-command="previous" aria-label="Previous track">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zM9.5 12 18 6v12z"/></svg><span>Previous</span>
-      </button>
-      <button data-command="play_pause" class="primary big" aria-label="Play or pause">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14l8-7zM14 5h2.5v14H14zM18.5 5H21v14h-2.5z"/></svg><span>Play / Pause</span>
-      </button>
-      <button data-command="next" aria-label="Next track">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg><span>Next</span>
-      </button>
-    </div>
-  </section>
+  <!-- Remote -->
+  <div class="tab" id="tab-remote">
+    <section>
+      <h2>Music</h2>
+      <div class="row">
+        <button data-command="previous" aria-label="Previous track">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zM9.5 12 18 6v12z"/></svg><span>Previous</span>
+        </button>
+        <button data-command="play_pause" class="primary big" aria-label="Play or pause">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14l8-7zM14 5h2.5v14H14zM18.5 5H21v14h-2.5z"/></svg><span>Play / Pause</span>
+        </button>
+        <button data-command="next" aria-label="Next track">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg><span>Next</span>
+        </button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Volume</h2>
-    <div class="row">
-      <button data-command="volume_down" data-hold aria-label="Volume down">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9zM14 11h7v2h-7z"/></svg><span>Volume down</span>
-      </button>
-      <button data-command="mute" aria-label="Mute or unmute">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/></svg><span>Mute</span>
-      </button>
-      <button data-command="volume_up" data-hold aria-label="Volume up">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9zM16 11h2.5V8.5h2V11H23v2h-2.5v2.5h-2V13H16z"/></svg><span>Volume up</span>
-      </button>
-    </div>
-  </section>
+    <section>
+      <h2>Volume</h2>
+      <div class="row">
+        <button data-command="volume_down" data-hold aria-label="Volume down">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9zM14 11h7v2h-7z"/></svg><span>Volume down</span>
+        </button>
+        <button data-command="mute" aria-label="Mute or unmute">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/></svg><span>Mute</span>
+        </button>
+        <button data-command="volume_up" data-hold aria-label="Volume up">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9zM16 11h2.5V8.5h2V11H23v2h-2.5v2.5h-2V13H16z"/></svg><span>Volume up</span>
+        </button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Apps &amp; websites</h2>
-    <div class="programs" id="programs"><p class="empty">Loading…</p></div>
-    <div class="notes" id="notes"></div>
-  </section>
+    <section>
+      <h2>Apps &amp; websites</h2>
+      <div class="programs" id="programs"><p class="empty">Loading…</p></div>
+      <div class="notes" id="notes"></div>
+    </section>
 
-  <section>
-    <h2>Type text on the laptop</h2>
-    <textarea id="text" maxlength="5000" placeholder="Write some text. The laptop will type it into the window that is active on it."></textarea>
-    <div class="options">
-      <label><input type="checkbox" id="enter"> Press Enter at the end</label>
-      <button id="sendText" class="primary">Type</button>
-    </div>
-  </section>
+    <section>
+      <h2>System</h2>
+      <div class="row">
+        <button data-command="lock" aria-label="Lock screen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H5v12h14V10h-2V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3zm3 3a2 2 0 0 1 1 3.7V19h-2v-2.3A2 2 0 0 1 12 13z"/></svg><span>Lock screen</span>
+        </button>
+        <button data-command="restart" data-confirm class="warn" aria-label="Restart the laptop">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L7 5.5 12 10V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>Restart</span>
+        </button>
+        <button data-command="shutdown" data-confirm class="danger" aria-label="Shut down the laptop">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v10h-2zM6.3 5.3l1.4 1.4A7 7 0 1 0 16.3 6.7l1.4-1.4A9 9 0 1 1 6.3 5.3z"/></svg><span>Shut down</span>
+        </button>
+      </div>
+    </section>
+  </div>
 
-  <section>
-    <h2>System</h2>
-    <div class="row">
-      <button data-command="lock" aria-label="Lock screen">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H5v12h14V10h-2V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3zm3 3a2 2 0 0 1 1 3.7V19h-2v-2.3A2 2 0 0 1 12 13z"/></svg><span>Lock screen</span>
-      </button>
-      <button data-command="restart" data-confirm class="warn" aria-label="Restart the laptop">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L7 5.5 12 10V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>Restart</span>
-      </button>
-      <button data-command="shutdown" data-confirm class="danger" aria-label="Shut down the laptop">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v10h-2zM6.3 5.3l1.4 1.4A7 7 0 1 0 16.3 6.7l1.4-1.4A9 9 0 1 1 6.3 5.3z"/></svg><span>Shut down</span>
-      </button>
-    </div>
-  </section>
+  <!-- Screen -->
+  <div class="tab" id="tab-screen" hidden>
+    <section>
+      <div class="toolbar">
+        <div class="segmented" id="quality" role="group" aria-label="Picture quality">
+          <button data-quality="low">Fast</button>
+          <button data-quality="normal">Normal</button>
+          <button data-quality="sharp">Sharp</button>
+        </div>
+        <button id="pauseScreen" aria-label="Pause the picture">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        </button>
+        <button id="screenKeyboard" aria-label="Show the keyboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 3v2h2V9zm4 0v2h2V9zm4 0v2h2V9zm4 0v2h2V9zM5 13v2h2v-2zm4 0v2h6v-2zm8 0v2h2v-2z"/></svg>
+        </button>
+      </div>
+      <div class="screen-area">
+        <div class="screen-box" id="screenBox" hidden>
+          <img id="screenImg" alt="Laptop screen" draggable="false">
+          <div id="cursorDot" hidden></div>
+        </div>
+        <div id="screenNote">Loading the screen…</div>
+      </div>
+      <div class="screen-info"><span id="screenState">—</span><span id="screenFps"></span></div>
+      <div class="row two" style="margin-top:10px">
+        <button class="small" data-scroll="360">▲ Scroll up</button>
+        <button class="small" data-scroll="-360">▼ Scroll down</button>
+      </div>
+      <p class="hint">Tap = click · Hold = right click · Pinch to zoom · Turn the phone sideways for a bigger picture.</p>
+    </section>
+    <div id="slot-screen"></div>
+  </div>
 
-  <button class="link" id="changePin">Change PIN</button>
+  <!-- Mouse -->
+  <div class="tab" id="tab-mouse" hidden>
+    <section>
+      <div id="pad">Move: slide 1 finger<br>Click: tap · Right click: tap with 2 fingers<br>Scroll: slide 2 fingers</div>
+      <div class="row" style="margin-top:10px">
+        <button class="small" id="leftClick">Left click</button>
+        <button class="small" id="holdLeft">Hold left</button>
+        <button class="small" id="rightClick">Right click</button>
+      </div>
+      <div class="toolbar" style="margin:10px 0 0">
+        <div class="segmented" id="speed" role="group" aria-label="Mouse speed">
+          <button data-speed="slow">Slow</button>
+          <button data-speed="normal">Normal</button>
+          <button data-speed="fast">Fast</button>
+        </div>
+        <button id="mouseKeyboard" aria-label="Show the keyboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 3v2h2V9zm4 0v2h2V9zm4 0v2h2V9zm4 0v2h2V9zM5 13v2h2v-2zm4 0v2h6v-2zm8 0v2h2v-2z"/></svg>
+        </button>
+      </div>
+    </section>
+    <div id="slot-mouse"></div>
+  </div>
+
+  <!-- Keyboard -->
+  <div class="tab" id="tab-keyboard" hidden>
+    <div id="slot-keyboard"></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="tab" id="tab-settings" hidden>
+    <section>
+      <h2>Phones connected to this laptop</h2>
+      <ul class="phones" id="phones"></ul>
+      <p class="hint" id="forgetInfo"></p>
+      <button class="wide" id="forgetMe">Disconnect this phone</button>
+      <button class="wide danger" id="forgetAll">Disconnect all phones</button>
+    </section>
+    <section>
+      <h2>The program on the laptop</h2>
+      <p>Stops Laptop Remote on the laptop. This phone stays connected for the next time you start it.</p>
+      <button class="wide danger" id="stopRemote">Stop the remote</button>
+    </section>
+    <section>
+      <h2>Tips</h2>
+      <p><b>Like an app:</b> add this page to your home screen (Chrome: menu ⋮ → Add to Home screen; Safari: share □↑ → Add to Home Screen).</p>
+      <p><b>Another laptop:</b> start Laptop Remote on it and open its link on this phone. Each laptop gets its own page and icon.</p>
+      <p><b>Away from home:</b> use the phone's hotspot, or Tailscale (see the README).</p>
+    </section>
+  </div>
 </div>
+
+<!-- One keyboard panel, moved into the tab where it is needed -->
+<section id="keyboard" hidden>
+  <h2>Keys</h2>
+  <div class="row four keys">
+    <button class="small" data-key="esc">Esc</button>
+    <button class="small" data-key="tab">Tab</button>
+    <button class="small" data-key="win">Win</button>
+    <button class="small" data-key="alt_tab">Alt+Tab</button>
+    <button class="small" data-key="left" aria-label="Left arrow">←</button>
+    <button class="small" data-key="up" aria-label="Up arrow">↑</button>
+    <button class="small" data-key="down" aria-label="Down arrow">↓</button>
+    <button class="small" data-key="right" aria-label="Right arrow">→</button>
+    <button class="small" data-key="backspace" aria-label="Backspace">⌫</button>
+    <button class="small" data-key="enter">Enter</button>
+    <button class="small" data-key="ctrl_c">Ctrl+C</button>
+    <button class="small" data-key="ctrl_v">Ctrl+V</button>
+  </div>
+  <h2>Type text</h2>
+  <textarea id="text" maxlength="5000" placeholder="Write some text. The laptop types it into the window that is active on it."></textarea>
+  <div class="options">
+    <label><input type="checkbox" id="enter"> Press Enter at the end</label>
+    <button id="sendText" class="primary">Type</button>
+  </div>
+</section>
+
+<nav id="nav" hidden>
+  <div class="tabs">
+    <button data-tab="remote" aria-label="Remote">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg><span>Remote</span>
+    </button>
+    <button data-tab="screen" aria-label="Screen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v9h16V6z"/></svg><span>Screen</span>
+    </button>
+    <button data-tab="mouse" aria-label="Mouse">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2v7H5V8a6 6 0 0 1 6-6zm2 0a6 6 0 0 1 6 6v1h-6zM5 11h14v5a7 7 0 0 1-14 0z"/></svg><span>Mouse</span>
+    </button>
+    <button data-tab="keyboard" aria-label="Keyboard">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 3v2h2V9zm4 0v2h2V9zm4 0v2h2V9zm4 0v2h2V9zM5 13v2h2v-2zm4 0v2h6v-2zm8 0v2h2v-2z"/></svg><span>Keyboard</span>
+    </button>
+    <button data-tab="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.6 2l.5 2.6a8 8 0 0 1 2 1.2l2.5-.9 1.6 2.8-2 1.7a8 8 0 0 1 0 2.4l2 1.7-1.6 2.8-2.5-.9a8 8 0 0 1-2 1.2l-.5 2.6h-3.2l-.5-2.6a8 8 0 0 1-2-1.2l-2.5.9-1.6-2.8 2-1.7a8 8 0 0 1 0-2.4l-2-1.7 1.6-2.8 2.5.9a8 8 0 0 1 2-1.2l.5-2.6zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg><span>Settings</span>
+    </button>
+  </div>
+</nav>
 
 <!-- ===== CONFIRMATION ===== -->
 <div id="confirm" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -219,8 +416,15 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  let pin = "";
-  try { pin = localStorage.getItem("pin") || ""; } catch (e) {}
+  const store = {
+    get(k, d = "") { try { return localStorage.getItem(k) || d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    remove(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+  const NO_CONNECTION = "No connection to the laptop. Is the remote running on it, and are you on the same Wi-Fi?";
+  let key = store.get("key");
+  let phoneId = "";
+  let currentTab = "remote";
 
   // ---------- short messages ----------
   let toastTimer;
@@ -232,42 +436,45 @@
     toastTimer = setTimeout(() => (el.className = isError ? "error" : ""), isError ? 4000 : 1600);
   }
   function vibrate(ms = 15) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+  function setStatus(s) { $("status").className = "status " + s; }
 
   // ---------- requests to the laptop ----------
-  async function request(path, body) {
-    const options = { headers: { "X-PIN": pin }, cache: "no-store" };
+  // If the laptop does not answer (the remote is stopped, the laptop is asleep,
+  // another Wi-Fi...), stop waiting after a few seconds.
+  async function send(path, options, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(path, { ...options, signal: controller.signal, cache: "no-store" });
+    } catch (e) {
+      setStatus("error");
+      throw new Error(NO_CONNECTION);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function api(path, body, timeoutMs = 8000) {
+    const options = { headers: { "X-Key": key } };
     if (body) {
       options.method = "POST";
       options.headers["Content-Type"] = "application/json";
       options.body = JSON.stringify(body);
     }
-    // If the laptop does not answer (the remote is stopped, the laptop is asleep, another
-    // Wi-Fi...), stop waiting after a few seconds. Typing a long text can take longer.
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), body && body.command === "type" ? 60000 : 8000) : 0;
-    if (controller) options.signal = controller.signal;
-    let res;
-    try {
-      res = await fetch(path, options);
-    } catch (e) {
-      $("status").className = "status error";
-      throw new Error("No connection to the laptop. Is the remote running on it, and are you on the same Wi-Fi?");
-    } finally {
-      clearTimeout(timer);
-    }
+    const res = await send(path, options, timeoutMs);
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      showPin("Wrong PIN, or the PIN has changed. Enter the PIN from the window on the laptop.");
-      throw new Error("Wrong PIN.");
+      disconnected("This phone is not connected to this laptop any more. Get a new link on the laptop.");
+      throw new Error(data.error || "This phone is not connected.");
     }
     if (!res.ok) throw new Error(data.error || "Error " + res.status);
-    $("status").className = "status ok";
+    setStatus("ok");
     return data;
   }
 
   async function command(body, quiet = false) {
     try {
-      const r = await request("/api/command", body);
+      const r = await api("/api/command", body, body.command === "type" ? 60000 : 8000);
       if (!quiet) toast(r.message || "Done");
       return true;
     } catch (e) {
@@ -276,48 +483,117 @@
     }
   }
 
-  // ---------- PIN ----------
-  function showPin(error = "") {
-    stopHold();
-    closeConfirm();
-    $("main").classList.remove("visible");
-    $("pinScreen").classList.add("visible");
-    $("pinError").textContent = error;
-    $("pinInput").value = "";
+  // ---------- connecting this phone ----------
+  function phoneName() {
+    const ua = navigator.userAgent;
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/iPad/.test(ua)) return "iPad";
+    if (/Android/.test(ua)) return "Android phone";
+    return "Browser";
   }
 
-  async function connect() {
+  function showWelcome(message = "") {
+    stopEverything();
+    $("app").hidden = true;
+    $("nav").hidden = true;
+    $("keyboard").hidden = true;
+    $("welcome").hidden = false;
+    $("welcomeMessage").textContent = message;
+  }
+
+  function disconnected(message) {
+    key = "";
+    store.remove("key");
+    showWelcome(message);
+  }
+
+  async function connectWithCode(code) {
+    showWelcome("Connecting…");
+    let res;
     try {
-      const r = await request("/api/check");
-      try { localStorage.setItem("pin", pin); } catch (e) {}
-      $("pinScreen").classList.remove("visible");
-      $("main").classList.add("visible");
-      $("laptopName").textContent = "Connected: " + r.laptop + (r.test_mode ? " (test mode)" : "");
+      res = await send("/api/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name: phoneName() }),
+      }, 10000);
+    } catch (e) {
+      showWelcome(e.message);
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { showWelcome(data.error || "The link did not work."); return; }
+    key = data.key;
+    store.set("key", key);
+    await start();
+    toast("Connected to " + data.laptop + ". Tip: add this page to your home screen.");
+  }
+
+  async function start() {
+    try {
+      const r = await api("/api/check");
+      phoneId = r.phone_id;
+      $("laptopName").textContent = r.laptop;
+      $("laptopInfo").textContent = "Laptop Remote · " + r.phone + (r.test_mode ? " · test mode" : "");
+      document.title = r.laptop + " – Remote";
+      $("welcome").hidden = true;
+      $("app").hidden = false;
+      $("nav").hidden = false;
+      $("keyboard").hidden = false;
+      showTab(store.get("tab", "remote"));
       loadPrograms();
     } catch (e) {
-      if (!$("pinScreen").classList.contains("visible")) showPin();
-      if (!$("pinError").textContent || !/Wrong PIN/.test(e.message)) $("pinError").textContent = e.message;
+      if (key) showWelcome(e.message);
     }
   }
 
-  $("pinForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    pin = $("pinInput").value.trim();
-    if (!pin) return;
-    $("pinError").textContent = "";
-    connect();
-  });
-  $("changePin").addEventListener("click", () => {
-    pin = "";
-    try { localStorage.removeItem("pin"); } catch (e) {}
-    showPin();
-  });
+  $("retry").addEventListener("click", () => { if (key) start(); else location.reload(); });
+
+  // ---------- tabs ----------
+  const keyboardSlots = { screen: "slot-screen", mouse: "slot-mouse", keyboard: "slot-keyboard" };
+  const keyboardOpen = { screen: false, mouse: false, keyboard: true };
+
+  function placeKeyboard() {
+    const kb = $("keyboard");
+    const slot = keyboardSlots[currentTab];
+    if (slot && keyboardOpen[currentTab]) {
+      $(slot).appendChild(kb);
+      kb.hidden = false;
+    } else {
+      kb.hidden = true;
+    }
+    $("screenKeyboard").classList.toggle("on", keyboardOpen.screen);
+    $("mouseKeyboard").classList.toggle("on", keyboardOpen.mouse);
+  }
+
+  function showTab(name) {
+    if (!$("tab-" + name)) name = "remote";
+    if (currentTab === "mouse" && name !== "mouse") releaseHold();
+    currentTab = name;
+    store.set("tab", name);
+    document.querySelectorAll(".tab").forEach((t) => (t.hidden = t.id !== "tab-" + name));
+    document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+    document.body.className = "tab-" + name;
+    placeKeyboard();
+    if (name === "screen") startScreen();  // the picture loop stops by itself on other tabs
+    if (name === "settings") loadPhones();
+    if (name === "remote") loadPrograms();
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  $("screenKeyboard").addEventListener("click", () => { keyboardOpen.screen = !keyboardOpen.screen; placeKeyboard(); });
+  $("mouseKeyboard").addEventListener("click", () => { keyboardOpen.mouse = !keyboardOpen.mouse; placeKeyboard(); });
+
+  function stopEverything() {
+    stopHold();
+    releaseHold();
+    closeConfirm(false);
+  }
 
   // ---------- apps & websites ----------
   async function loadPrograms() {
     const box = $("programs");
     try {
-      const r = await request("/api/programs");
+      const r = await api("/api/programs");
       box.replaceChildren();
       if (!r.programs.length) {
         const p = document.createElement("p");
@@ -340,36 +616,39 @@
     }
   }
 
-  // ---------- confirmation for shut down and restart ----------
+  // ---------- confirmation ----------
+  let confirmResolve = null;
+  function ask(title, text, yes, danger = true) {
+    closeConfirm(false);
+    $("confirmTitle").textContent = title;
+    $("confirmText").textContent = text;
+    $("confirmYes").textContent = yes;
+    $("confirmYes").classList.toggle("safe", !danger);
+    $("confirm").classList.add("visible");
+    vibrate(40);
+    return new Promise((resolve) => (confirmResolve = resolve));
+  }
+  function closeConfirm(answer) {
+    $("confirm").classList.remove("visible");
+    if (confirmResolve) { const r = confirmResolve; confirmResolve = null; r(answer); }
+  }
+  $("confirmNo").addEventListener("click", () => closeConfirm(false));
+  $("confirmYes").addEventListener("click", () => closeConfirm(true));
+  $("confirm").addEventListener("click", (e) => { if (e.target.id === "confirm") closeConfirm(false); });
+
   const confirmTexts = {
     shutdown: ["Shut down the laptop?", "The laptop will shut down in 5 seconds. Anything unsaved in open programs may be lost.", "Yes, shut down"],
     restart: ["Restart the laptop?", "The laptop will restart in 5 seconds. Anything unsaved in open programs may be lost.", "Yes, restart"],
   };
-  let pendingConfirm = null;
-  function askConfirm(k) {
-    pendingConfirm = k;
-    [$("confirmTitle").textContent, $("confirmText").textContent, $("confirmYes").textContent] = confirmTexts[k];
-    $("confirm").classList.add("visible");
-    vibrate(40);
-  }
-  function closeConfirm() { $("confirm").classList.remove("visible"); pendingConfirm = null; }
-  $("confirmNo").addEventListener("click", closeConfirm);
-  $("confirm").addEventListener("click", (e) => { if (e.target.id === "confirm") closeConfirm(); });
-  $("confirmYes").addEventListener("click", () => {
-    const k = pendingConfirm;
-    closeConfirm();
-    if (k) command({ command: k, confirmed: true });
-  });
 
   // ---------- volume: tap = one step, hold = keeps changing while held ----------
   // The next request is sent only after the laptop answered the previous one.
-  // Repeating stops as soon as you let go, as soon as something fails
-  // (e.g. a wrong PIN), and after 15 seconds at the latest.
+  // Repeating stops as soon as you let go, as soon as something fails, and after 15 s.
   let stopHold = () => {};
   function hold(b, k) {
     stopHold();
     let running = true;
-    const start = Date.now();
+    const startTime = Date.now();
     const stop = () => { running = false; b.classList.remove("held"); };
     stopHold = stop;
     b.classList.add("held");
@@ -377,7 +656,7 @@
     (async () => {
       let ok = await command({ command: k }, true);
       await wait(450);
-      while (ok && running && Date.now() - start < 15000) {
+      while (ok && running && Date.now() - startTime < 15000) {
         ok = await command({ command: k }, true);
         await wait(120);
       }
@@ -385,13 +664,13 @@
     })();
   }
   ["pointerup", "pointercancel", "blur"].forEach((t) => window.addEventListener(t, () => stopHold()));
-  document.addEventListener("visibilitychange", () => stopHold());
 
-  // ---------- buttons ----------
   document.querySelectorAll("button[data-command]").forEach((b) => {
     const k = b.dataset.command;
     if (b.hasAttribute("data-confirm")) {
-      b.addEventListener("click", () => askConfirm(k));
+      b.addEventListener("click", async () => {
+        if (await ask(...confirmTexts[k])) command({ command: k, confirmed: true });
+      });
     } else if (b.hasAttribute("data-hold")) {
       b.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
@@ -400,13 +679,16 @@
       });
       b.addEventListener("pointerleave", () => stopHold());
       b.addEventListener("contextmenu", (e) => e.preventDefault());
-      // Keyboard (Enter/Space) — one step.
-      b.addEventListener("click", (e) => { if (e.detail === 0) command({ command: k }, true); });
+      b.addEventListener("click", (e) => { if (e.detail === 0) command({ command: k }, true); });  // keyboard
     } else {
       b.addEventListener("click", () => { vibrate(); command({ command: k }); });
     }
   });
 
+  // ---------- keys and typing ----------
+  document.querySelectorAll("button[data-key]").forEach((b) => {
+    b.addEventListener("click", () => { vibrate(); command({ command: "key", key: b.dataset.key }, true); });
+  });
   $("sendText").addEventListener("click", async () => {
     const text = $("text").value;
     if (!text) { toast("Write some text first.", true); return; }
@@ -417,13 +699,331 @@
     if (ok) $("text").value = "";
   });
 
-  // When you come back to the page, reload the app list (config.ini may have changed).
+  // ---------- screen ----------
+  const QUALITY = { low: 800, normal: 1280, sharp: 1920 };
+  const live = { running: false, paused: false, last: "", url: null, frames: [] };
+  let quality = store.get("quality", "normal");
+  if (!QUALITY[quality]) quality = "normal";
+
+  function markQuality() {
+    document.querySelectorAll("#quality button").forEach((b) => b.classList.toggle("on", b.dataset.quality === quality));
+  }
+  markQuality();
+  document.querySelectorAll("#quality button").forEach((b) => b.addEventListener("click", () => {
+    quality = b.dataset.quality;
+    store.set("quality", quality);
+    live.last = "";
+    markQuality();
+  }));
+  $("pauseScreen").addEventListener("click", () => {
+    live.paused = !live.paused;
+    $("pauseScreen").classList.toggle("on", live.paused);
+    if (live.paused) { $("screenState").textContent = "Paused"; $("screenFps").textContent = ""; }
+    else startScreen();
+  });
+
+  function screenNote(text) {
+    $("screenNote").textContent = text;
+    $("screenNote").hidden = !text;
+  }
+
+  function setCursor(header) {
+    const dot = $("cursorDot");
+    const parts = (header || "").split(",").map(Number);
+    if (parts.length !== 2 || parts.some((n) => isNaN(n))) { dot.hidden = true; return; }
+    dot.style.left = parts[0] * 100 + "%";
+    dot.style.top = parts[1] * 100 + "%";
+    dot.hidden = false;
+  }
+
+  function screenWanted() {
+    return currentTab === "screen" && !live.paused && document.visibilityState === "visible" && !!key && !$("app").hidden;
+  }
+
+  function startScreen() {
+    if (live.running || !screenWanted()) return;
+    live.running = true;
+    screenLoop().finally(() => (live.running = false));
+  }
+
+  async function screenLoop() {
+    $("screenState").textContent = "Live";
+    while (screenWanted()) {
+      const began = performance.now();
+      let res;
+      try {
+        res = await send(`/api/screen?w=${QUALITY[quality]}&last=${encodeURIComponent(live.last)}`,
+                         { headers: { "X-Key": key } }, 10000);
+      } catch (e) {
+        if (!$("screenBox").hidden) $("screenState").textContent = "No connection…";
+        else screenNote(NO_CONNECTION);
+        await wait(1500);
+        continue;
+      }
+      if (res.status === 401) { disconnected("This phone is not connected to this laptop any more. Get a new link on the laptop."); return; }
+      if (res.status !== 200 && res.status !== 204) {
+        const data = await res.json().catch(() => ({}));
+        $("screenBox").hidden = true;
+        screenNote(data.error || "The screen cannot be shown right now.");
+        live.last = "";
+        await wait(1500);
+        continue;
+      }
+      setStatus("ok");
+      setCursor(res.headers.get("X-Cursor"));
+      if (res.status === 200) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const img = $("screenImg");
+        img.src = url;
+        try { await img.decode(); } catch (e) {}
+        if (live.url) URL.revokeObjectURL(live.url);
+        live.url = url;
+        live.last = res.headers.get("X-Frame") || "";
+        $("screenBox").hidden = false;
+        screenNote("");
+        $("screenState").textContent = `Live · ${img.naturalWidth}×${img.naturalHeight}`;
+        const now = performance.now();
+        live.frames = live.frames.filter((t) => now - t < 3000).concat(now);
+        $("screenFps").textContent = (live.frames.length / 3).toFixed(1) + " pictures/s";
+      } else {
+        await wait(200);  // nothing changed on the screen
+      }
+      const spent = performance.now() - began;
+      if (spent < 80) await wait(80 - spent);
+    }
+    if (live.paused) $("screenState").textContent = "Paused";
+  }
+
+  function ripple(fx, fy, right) {
+    const r = document.createElement("div");
+    r.className = "ripple" + (right ? " right" : "");
+    r.style.left = fx * 100 + "%";
+    r.style.top = fy * 100 + "%";
+    $("screenBox").appendChild(r);
+    setTimeout(() => r.remove(), 500);
+  }
+
+  function clickOnScreen(clientX, clientY, button) {
+    const img = $("screenImg");
+    const rect = img.getBoundingClientRect();
+    if (!img.naturalWidth || !rect.width) return;
+    const fx = (clientX - rect.left) / rect.width;
+    const fy = (clientY - rect.top) / rect.height;
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return;
+    ripple(fx, fy, button === "right");
+    setCursor(fx + "," + fy);
+    command({ command: "click", button, x: fx, y: fy }, true);
+  }
+
+  let tap = null;
+  function cancelTap() { if (tap) clearTimeout(tap.timer); tap = null; }
+  const shot = $("screenImg");
+  shot.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (tap) { cancelTap(); return; }  // a second finger: pinch zoom, not a click
+    tap = { id: e.pointerId, x: e.clientX, y: e.clientY, long: false };
+    tap.timer = setTimeout(() => {
+      if (!tap) return;
+      tap.long = true;
+      vibrate(40);
+      clickOnScreen(tap.x, tap.y, "right");
+    }, 550);
+  });
+  shot.addEventListener("pointermove", (e) => {
+    if (tap && e.pointerId === tap.id && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 10) cancelTap();
+  });
+  shot.addEventListener("pointerup", (e) => {
+    if (!tap || e.pointerId !== tap.id) return;
+    clearTimeout(tap.timer);
+    if (!tap.long) clickOnScreen(e.clientX, e.clientY, "left");
+    tap = null;
+  });
+  shot.addEventListener("pointercancel", cancelTap);
+  shot.addEventListener("contextmenu", (e) => e.preventDefault());
+  document.querySelectorAll("button[data-scroll]").forEach((b) => b.addEventListener("click", () => {
+    vibrate();
+    command({ command: "scroll", amount: Number(b.dataset.scroll) }, true);
+  }));
+
+  // ---------- touchpad ----------
+  const SPEED = { slow: 1.0, normal: 1.6, fast: 2.4 };
+  let speed = store.get("speed", "normal");
+  if (!SPEED[speed]) speed = "normal";
+  function markSpeed() { document.querySelectorAll("#speed button").forEach((b) => b.classList.toggle("on", b.dataset.speed === speed)); }
+  markSpeed();
+  document.querySelectorAll("#speed button").forEach((b) => b.addEventListener("click", () => {
+    speed = b.dataset.speed;
+    store.set("speed", speed);
+    markSpeed();
+  }));
+
+  // Movements are added up and sent one request at a time, so nothing piles up.
+  const mouse = { dx: 0, dy: 0, scroll: 0, busy: false };
+  async function flushMouse() {
+    if (mouse.busy) return;
+    mouse.busy = true;
+    try {
+      for (;;) {
+        const dx = Math.trunc(mouse.dx), dy = Math.trunc(mouse.dy);
+        const amount = Math.trunc(mouse.scroll / 30) * 30;
+        if (!dx && !dy && !amount) break;
+        if (dx || dy) {
+          mouse.dx -= dx; mouse.dy -= dy;
+          if (!(await command({ command: "mouse_move", dx, dy }, true))) { mouse.dx = mouse.dy = mouse.scroll = 0; break; }
+        }
+        if (amount) {
+          mouse.scroll -= amount;
+          if (!(await command({ command: "scroll", amount }, true))) { mouse.dx = mouse.dy = mouse.scroll = 0; break; }
+        }
+      }
+    } finally {
+      mouse.busy = false;
+    }
+  }
+
+  const pad = $("pad");
+  const fingers = new Map();
+  let gesture = null;
+  pad.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { pad.setPointerCapture(e.pointerId); } catch (err) {}
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fingers.size === 1) gesture = { start: performance.now(), moved: 0, most: 1 };
+    else if (gesture) gesture.most = Math.max(gesture.most, fingers.size);
+    pad.classList.add("active");
+  });
+  pad.addEventListener("pointermove", (e) => {
+    const p = fingers.get(e.pointerId);
+    if (!p || !gesture) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    gesture.moved += Math.abs(dx) + Math.abs(dy);
+    if (fingers.size === 1 && gesture.most === 1) {
+      const f = SPEED[speed] * (1 + Math.min(Math.hypot(dx, dy), 30) / 10);  // faster finger = farther
+      mouse.dx += dx * f;
+      mouse.dy += dy * f;
+    } else if (fingers.size >= 2) {
+      mouse.scroll += (dy * 3) / fingers.size;
+    }
+    flushMouse();
+  });
+  function fingerUp(e) {
+    if (!fingers.has(e.pointerId)) return;
+    fingers.delete(e.pointerId);
+    if (fingers.size === 0 && gesture) {
+      if (performance.now() - gesture.start < 300 && gesture.moved < 12) {
+        vibrate();
+        command({ command: "click", button: gesture.most >= 2 ? "right" : "left" }, true);
+      }
+      gesture = null;
+      pad.classList.remove("active");
+    }
+  }
+  pad.addEventListener("pointerup", fingerUp);
+  pad.addEventListener("pointercancel", fingerUp);
+  pad.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  $("leftClick").addEventListener("click", () => { vibrate(); command({ command: "click", button: "left" }, true); });
+  $("rightClick").addEventListener("click", () => { vibrate(); command({ command: "click", button: "right" }, true); });
+  let holding = false;
+  $("holdLeft").addEventListener("click", async () => {
+    vibrate();
+    holding = !holding;
+    $("holdLeft").classList.toggle("on", holding);
+    $("holdLeft").textContent = holding ? "Let go" : "Hold left";
+    if (!(await command({ command: "mouse_button", button: "left", pressed: holding }, true)) && holding) {
+      holding = false;
+      $("holdLeft").classList.remove("on");
+      $("holdLeft").textContent = "Hold left";
+    }
+  });
+  function releaseHold() {
+    if (!holding) return;
+    holding = false;
+    $("holdLeft").classList.remove("on");
+    $("holdLeft").textContent = "Hold left";
+    if (key) command({ command: "mouse_button", button: "left", pressed: false }, true);
+  }
+
+  // ---------- settings ----------
+  function ago(seconds) {
+    const s = Date.now() / 1000 - seconds;
+    if (s < 90) return "just now";
+    if (s < 3600) return Math.round(s / 60) + " min ago";
+    if (s < 86400) return Math.round(s / 3600) + " h ago";
+    return Math.round(s / 86400) + " days ago";
+  }
+  async function loadPhones() {
+    const list = $("phones");
+    try {
+      const r = await api("/api/phones");
+      list.replaceChildren();
+      for (const p of r.phones) {
+        const li = document.createElement("li");
+        const left = document.createElement("div");
+        left.textContent = p.name;
+        const small = document.createElement("small");
+        small.textContent = " · used " + ago(p.last_used);
+        left.appendChild(small);
+        li.appendChild(left);
+        if (p.id === phoneId) {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = "this phone";
+          li.appendChild(tag);
+        }
+        list.appendChild(li);
+      }
+      $("forgetInfo").textContent = r.forget_days
+        ? `A phone that is not used for ${r.forget_days} days is disconnected automatically.` : "";
+    } catch (e) {
+      list.replaceChildren();
+      toast(e.message, true);
+    }
+  }
+  $("forgetMe").addEventListener("click", async () => {
+    if (!(await ask("Disconnect this phone?", "To use it again, you will need a new link from the laptop.", "Yes, disconnect"))) return;
+    if (await command({ command: "forget_me" }, true)) disconnected("This phone is disconnected. To connect it again, get a new link on the laptop.");
+  });
+  $("forgetAll").addEventListener("click", async () => {
+    if (!(await ask("Disconnect all phones?", "All phones lose access, this one too. To use the remote again, you will need a new link from the laptop.", "Yes, disconnect all"))) return;
+    if (await command({ command: "forget_all", confirmed: true }, true)) disconnected("All phones are disconnected. To connect again, get a new link on the laptop.");
+  });
+  $("stopRemote").addEventListener("click", async () => {
+    if (!(await ask("Stop the remote?", "Laptop Remote stops on the laptop. To use it again, start it on the laptop (start.bat).", "Yes, stop it"))) return;
+    if (await command({ command: "stop_remote", confirmed: true }, true)) {
+      showWelcome("The remote on the laptop is stopped. Start it again on the laptop, then tap Try again.");
+    }
+  });
+
+  // ---------- page shown again / hidden ----------
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && $("main").classList.contains("visible")) loadPrograms();
+    if (document.visibilityState === "visible") {
+      if (!$("app").hidden) {
+        if (currentTab === "screen") startScreen();
+        if (currentTab === "remote") loadPrograms();
+      }
+    } else {
+      stopHold();
+      releaseHold();
+    }
   });
 
   // ---------- start ----------
-  if (pin) connect(); else showPin();
+  // A link from the laptop looks like  http://192.168.x.x:8765/#connect=CODE
+  function openedWithLink() {
+    const link = location.hash.match(/connect=([\w-]+)/);
+    if (!link) return false;
+    history.replaceState(null, "", location.pathname + location.search);  // hide the code
+    connectWithCode(link[1]);
+    return true;
+  }
+  // The link can also be opened in a tab where this page is already open.
+  window.addEventListener("hashchange", openedWithLink);
+  if (!openedWithLink()) {
+    if (key) start(); else showWelcome();
+  }
 })();
 </script>
 </body>

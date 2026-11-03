@@ -1,36 +1,47 @@
 # Laptop Remote
 
-Control your Windows laptop from your phone over your home Wi-Fi. Nothing gets
-installed on the phone: the laptop runs a small web server, and you open the laptop's
-address in the phone's browser (Chrome, Safari…) to get a page with big buttons.
+Control your Windows laptop from your phone over your home Wi-Fi: music, volume, apps, typing —
+and you can also **see the laptop screen, click on it, and use your phone as a touchpad and keyboard**.
 
-| Section on the phone | Buttons |
+Nothing gets installed on the phone. The laptop runs a small program, and the phone opens it in
+its browser (Chrome, Safari…). There is **no PIN**: you connect a phone once with a link, and after
+that it just works — until you disconnect it.
+
+| Tab on the phone | What you can do |
 |---|---|
-| Music | Previous · Play / Pause · Next |
-| Volume | Volume down · Mute · Volume up (hold a button to keep changing the volume) |
-| Apps & websites | your own list from `config.ini` (e.g. Chrome, YouTube, Netflix…) |
-| Type text on the laptop | write text on the phone, and the laptop types it into the active window |
-| System | Lock screen · Restart · Shut down (restart and shut down ask for confirmation on the phone) |
+| **Remote** | Music (previous / play-pause / next) · Volume (down / mute / up, hold to keep changing) · your apps and websites from `config.ini` · Lock screen · Restart · Shut down (restart and shut down ask first) |
+| **Screen** | A live picture of the laptop screen. Tap = click there · Hold = right click · Scroll buttons · Pinch to zoom |
+| **Mouse** | The phone becomes a touchpad: slide to move, tap to click, tap with 2 fingers for a right click, slide 2 fingers to scroll, "Hold left" to drag |
+| **Keyboard** | Esc, Tab, Win, Alt+Tab, arrows, Backspace, Enter, Ctrl+C, Ctrl+V, and typing any text into the active window |
+| **Settings** | Phones connected to the laptop · Disconnect this phone · Disconnect all phones · Stop the remote |
 
-All you need is Python. No extra packages are required (no `pip install`).
-Music, volume and typing keys are sent with `ctypes` (part of Python). Shut down and
-restart use the `shutdown` command that is built into every Windows.
+All you need is Python. No extra packages are required (no `pip install`). Keys and the mouse are
+sent with `ctypes` (part of Python), the screen picture is made with Windows' own drawing functions,
+and shut down / restart use the `shutdown` command that is built into every Windows.
+
+**New in version 2:** no PIN (a one-time link instead), screen view with clicking, touchpad, keyboard
+keys, disconnecting phones, stopping from the phone or with `stop.bat`, several laptops, Tailscale.
 
 ---
 
 ## Contents
 
 1. [Install Python](#1-install-python)
-2. [Download the project from GitHub (ZIP)](#2-download-the-project-from-github-zip)
-3. [Start the server](#3-start-the-server)
+2. [Download the project](#2-download-the-project)
+3. [Start the remote](#3-start-the-remote)
 4. [Connect your phone](#4-connect-your-phone)
-5. [Add your own apps and websites](#5-add-your-own-apps-and-websites)
-6. [Windows Firewall — allow it only on private networks](#6-windows-firewall--allow-it-only-on-private-networks)
-7. [Make your network "private"](#7-make-your-network-private)
-8. [Other settings (port, PIN, volume step)](#8-other-settings-port-pin-volume-step)
-9. [Start automatically with Windows](#9-start-automatically-with-windows)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Security](#11-security)
+5. [Using the remote](#5-using-the-remote)
+6. [Stop the remote, disconnect phones](#6-stop-the-remote-disconnect-phones)
+7. [More laptops](#7-more-laptops)
+8. [Away from home: hotspot or Tailscale](#8-away-from-home-hotspot-or-tailscale)
+9. [Add your own apps and websites](#9-add-your-own-apps-and-websites)
+10. [Windows Firewall — allow it only on private networks](#10-windows-firewall--allow-it-only-on-private-networks)
+11. [Make your network "private"](#11-make-your-network-private)
+12. [Other settings](#12-other-settings)
+13. [Start automatically with Windows](#13-start-automatically-with-windows)
+14. [Update to a new version](#14-update-to-a-new-version)
+15. [Troubleshooting](#15-troubleshooting)
+16. [Security](#16-security)
 
 ---
 
@@ -39,8 +50,7 @@ restart use the `shutdown` command that is built into every Windows.
 **First, check whether you already have it:**
 
 1. Press the **Windows** key, type `cmd` and press **Enter**. A black window opens.
-2. Type `py --version` and press **Enter**. If it says the command was not found,
-   also try `python --version`.
+2. Type `py --version` and press **Enter**. If it says the command was not found, also try `python --version`.
 3. If it prints something like `Python 3.13.1`, you already have Python. Go to section 2.
    (Version 3.8 or newer is needed.)
 
@@ -48,100 +58,189 @@ restart use the `shutdown` command that is built into every Windows.
 
 1. Open <https://www.python.org/downloads/> and click the yellow **Download Python …** button.
 2. Run the downloaded file and follow the steps:
-   - If the first screen has a **"Add python.exe to PATH"** checkbox,
-     **make sure to tick it** (at the bottom of the window), then click **Install Now**.
-   - If it installs the **"Python install manager"**, just install it to the end. If a black
-     window later asks whether to install Python, answer yes (type `Y` and press **Enter**).
+   - If the first screen has a **"Add python.exe to PATH"** checkbox, **make sure to tick it**
+     (at the bottom of the window), then click **Install Now**.
+   - If it installs the **"Python install manager"**, just install it to the end. If a black window
+     later asks whether to install Python, answer yes (type `Y` and press **Enter**).
 3. Close all black `cmd` windows, open a new one and check again with `py --version`.
 
-Another way: open the **Microsoft Store**, search for "Python" and install the latest
-**Python 3** published by *Python Software Foundation*.
+Another way: open the **Microsoft Store**, search for "Python" and install the latest **Python 3**
+published by *Python Software Foundation*.
 
-## 2. Download the project from GitHub (ZIP)
+## 2. Download the project
 
-1. On the laptop, open the project page: <https://github.com/bogdandata/laptop-remote>
-   (if the repository is private, sign in to GitHub first).
-2. Click the green **`<> Code`** button above the list of files.
-3. In the menu that opens, click **Download ZIP**. The file `laptop-remote-main.zip` is
-   downloaded (usually to your **Downloads** folder).
-4. **Unblock the ZIP** (so Windows doesn't stop you with warnings later): right-click the ZIP →
-   **Properties** → at the bottom tick **Unblock** → **OK**.
-   If there is no such option, that's fine, just continue.
-5. Right-click the ZIP → **Extract All…** → choose where (e.g. **Documents**) → **Extract**.
-   Don't run the files directly from inside the ZIP; use the extracted folder.
+**Option A — in the browser (ZIP):**
 
-In the extracted `laptop-remote-main` folder you should see:
+1. On the laptop, open <https://github.com/bogdandata/laptop-remote>.
+2. Click the green **`<> Code`** button above the list of files, then **Download ZIP**.
+   The file `laptop-remote-main.zip` is downloaded (usually to **Downloads**).
+3. **Unblock the ZIP** (so Windows doesn't stop you with warnings later): right-click the ZIP →
+   **Properties** → at the bottom tick **Unblock** → **OK**. If there is no such option, just continue.
+4. Right-click the ZIP → **Extract All…** → **Extract**. Use the extracted folder, not the ZIP itself.
+
+**Option B — with one command** (in a PowerShell window or the VS Code terminal). It downloads the project
+into **Downloads\laptop-remote-main** and starts it:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'; cd $HOME\Downloads; Invoke-WebRequest https://github.com/bogdandata/laptop-remote/archive/refs/heads/main.zip -OutFile laptop-remote.zip -UseBasicParsing; Expand-Archive laptop-remote.zip -DestinationPath . -Force; cd laptop-remote-main; py server.py
+```
+
+Run this long command only the first time (to update later, see [section 14](#14-update-to-a-new-version)).
+
+In the project folder you should see:
 
 ```
-start.bat        ← this is what you run (double-click)
+start.bat        ← double-click to start the remote
+stop.bat         ← double-click to stop it (even if you can't find its window)
 config.ini       ← your settings and the list of apps
-server.py        ← the web server
+server.py        ← the program itself
 actions.py       ← the actions the laptop performs
 web\index.html   ← the page the phone shows
 README.md        ← this guide
 ```
 
-## 3. Start the server
+## 3. Start the remote
 
-**Double-click `start.bat`.** A black window opens and looks roughly like this:
+**Double-click `start.bat`** (or, in the VS Code terminal, inside the project folder: `py server.py`).
+A black window opens. The first time it looks roughly like this:
 
 ```
-==============================================================
-  LAPTOP REMOTE — the server is running
-==============================================================
-  On your phone (on the same Wi-Fi), open this address in the browser:
+==================================================================
+  LAPTOP REMOTE — running on “MY-LAPTOP”
+==================================================================
+  No phone is connected to this laptop yet.
 
-      http://192.168.1.23:8765
+  To connect a phone, open this link on it (it works once, for 15 minutes):
 
-  PIN for the phone:   482913
-  First start: a PIN was created and saved in config.ini.
-  It stays the same next time.
+      http://192.168.1.23:8765/#connect=Xk3v9QeL2mPq7RtYwZ1aB8cD
+
+  The link is already copied: paste it (Ctrl+V) into an e-mail or a message
+  to yourself, and open it on your phone.
 
   Apps on the list: 5 (the list is in config.ini)
-==============================================================
-  Keep this window open while you use the remote (you can
-  minimize it). To stop the server, close the window or press Ctrl+C.
-==============================================================
+==================================================================
+  Type a letter here and press Enter:
+      L   new link for a phone
+      D   disconnect all phones (their access stops working)
+      Q   stop the remote
+
+  Keep this window open while you use the remote (you can minimize it).
+  To stop: type Q and Enter, press Ctrl+C, close the window, or run stop.bat.
+==================================================================
 ```
 
-- Your address and PIN will be different. **Write them down**, you need them on the phone.
-- The PIN is created only on the first start and saved in `config.ini`, so it stays the same.
-- **Keep that window open** while you use the remote (you can minimize it to the taskbar).
-  Every command that arrives from the phone shows up in it, e.g.
-  `20:15:03  192.168.1.50     command: volume_up`.
-- **The first time**, Windows will probably show a Windows Firewall window. Then do what
-  [section 6](#6-windows-firewall--allow-it-only-on-private-networks) says.
-
-> If Windows shows a warning when you double-click ("Windows protected your PC" or
-> "The publisher could not be verified"), click **More info → Run anyway**, or **Run**.
-> The warning does not appear if you unblocked the ZIP (step 4 in section 2).
+- **Keep that window open** while you use the remote (you can minimize it). Every action from the phone
+  shows up in it, e.g. `20:15:03  192.168.1.50     Android phone: volume_up`.
+- **The first time**, Windows will probably show a Windows Firewall window: follow
+  [section 10](#10-windows-firewall--allow-it-only-on-private-networks).
+- If Windows warns you when you double-click ("Windows protected your PC" or "The publisher could not be
+  verified"), click **More info → Run anyway**, or **Run**. This doesn't happen if you unblocked the ZIP.
 
 ## 4. Connect your phone
 
-1. The phone must be on the **same Wi-Fi** as the laptop (not on mobile data and not on a "guest" network).
-2. On the phone, open the browser and in the address bar (at the top, where you type websites)
-   type exactly the address from the black window, e.g. `http://192.168.1.23:8765` — with `http://`
-   at the start and the colon and number at the end.
-3. Enter the **PIN** from the black window and tap **Connect**.
+You do this **once per phone**. There is no PIN.
 
-The phone remembers the PIN, so you don't have to type it again next time.
+1. The phone must be on the **same Wi-Fi** as the laptop (not on mobile data, not on a "guest" network).
+2. In the black window there is a link like `http://192.168.1.23:8765/#connect=…`. It is already copied.
+   **Paste it (Ctrl+V) into an e-mail or a message to yourself** (Gmail, Viber, WhatsApp…) and send it.
+3. **Open the link on your phone.** The page says "Connected to …" and the remote opens.
+4. **Add the page to your home screen**, so it opens like an app:
+   - Android (Chrome): menu **⋮** → **Add to Home screen**
+   - iPhone (Safari): the share button **□↑** → **Add to Home Screen**
 
-**Tip:** add the page to your phone's home screen, so it opens like an app:
-- Android (Chrome): menu **⋮** → **Add to Home screen**
-- iPhone (Safari): the share button **□↑** → **Add to Home Screen**
+From now on just tap the icon. The phone stays connected, also after you restart the laptop.
 
-**How the buttons work:**
-- **Music**: works with the program that is currently playing (Spotify, YouTube in a browser, VLC…),
-  just like the media keys on a keyboard.
-- **Volume**: one tap changes the volume by one step (2%). If you hold **Volume down** or
-  **Volume up**, the volume keeps changing until you let go. Tapping **Mute** again turns the sound back on.
-- **Type text**: on the laptop, first click into the window where the text should go (e.g. Word or
-  the YouTube search box). Then write the text on the phone and tap **Type**. If you tick
-  "Press Enter at the end", the laptop presses Enter after the text. Accented letters and emoji work too.
-- **Shut down / Restart**: the phone asks "Are you sure?" first. After you confirm, the laptop shuts down
-  or restarts in 5 seconds.
+About the link:
+- It **works only once** and **only for 15 minutes**, and also stops working when the remote stops.
+  If someone finds the e-mail later, the link is useless.
+- Need a new one (it expired, or for another phone)? In the black window type **L** and press **Enter**.
+- If the phone can't open it, the window lists other addresses of the laptop. Try those
+  (the right one usually starts with `192.168.`).
 
-## 5. Add your own apps and websites
+## 5. Using the remote
+
+**Remote tab** — music, volume, apps, lock, restart, shut down.
+- Music buttons work with the program that is playing (Spotify, YouTube in a browser, VLC…), like the media keys of a keyboard.
+- Volume: one tap = one step (2%). Hold **Volume down** or **Volume up** to keep changing it. **Mute** again turns the sound back on.
+- Restart and Shut down ask "Are you sure?" first, then happen after 5 seconds.
+
+**Screen tab** — a live picture of the laptop's main screen.
+- **Tap** on the picture = left click exactly there. **Hold** = right click. Two quick taps = double click.
+- **Scroll up / Scroll down** buttons turn the mouse wheel.
+- **Fast / Normal / Sharp** picks the picture quality. Fast is smoother on a slow Wi-Fi, Sharp shows small text better.
+  Expect a few pictures per second, like a slow video — fine for clicking, not for films.
+- **Pause** stops the picture. The picture also stops by itself when you leave the tab or lock the phone, so it doesn't use data.
+- Pinch to zoom; turn the phone sideways for a bigger picture.
+- The keyboard button shows the keys and the text box under the picture.
+- The blue circle shows where the laptop's mouse cursor is.
+
+**Mouse tab** — the phone is a touchpad.
+- Slide 1 finger = move the cursor · Tap = left click · Tap with 2 fingers = right click · Slide 2 fingers = scroll.
+- **Hold left** keeps the left button pressed, so you can drag (move a window, select text). Tap **Let go** when you are done.
+- **Slow / Normal / Fast** sets the cursor speed.
+
+**Keyboard tab** — special keys and typing.
+- Keys: Esc, Tab, Win (Start menu), Alt+Tab (switch window), arrows, Backspace, Enter, Ctrl+C (copy), Ctrl+V (paste).
+- **Type text**: first click into the right place on the laptop (or tap it on the Screen tab), then write the text on the
+  phone and tap **Type**. "Press Enter at the end" presses Enter after the text. Accented letters and emoji work too.
+
+**Settings tab** — which phones are connected, disconnecting, stopping (see section 6).
+
+## 6. Stop the remote, disconnect phones
+
+There are two different things:
+- **Stop the remote** = the program on the laptop stops. Phones **stay connected** for the next time you start it.
+- **Disconnect a phone** = that phone **loses access**. To use it again it needs a new link.
+
+**Stop the remote** — any of these:
+- In its window (or the VS Code terminal): type **Q** and press **Enter**, or press **Ctrl+C**, or close the window.
+- **Double-click `stop.bat`** in the project folder. It finds and stops the remote even if you can't see its
+  window (for example a minimized or hidden VS Code terminal).
+- On the phone: **Settings → Stop the remote**.
+
+**Disconnect phones:**
+- On the phone: **Settings → Disconnect this phone**, or **Disconnect all phones**.
+- On the laptop, in the remote's window: type **D** and press **Enter** (all phones; links that were not used yet stop working too).
+- A phone that is not used for **30 days** is disconnected automatically (you can change this, see section 12).
+
+## 7. More laptops
+
+Do sections 2–4 on each laptop: download the project, start it, and open that laptop's link on your phone.
+You can send yourself the GitHub link (or the command from section 2) by e-mail and open it on the other laptop.
+
+Each laptop gets its own page and its **own icon** on the phone, named after the laptop. To change the name,
+set `name =` in that laptop's `config.ini` (section 12).
+
+A web page alone can't control a computer (browsers don't allow that, for safety), so the remote must run on
+each laptop you want to control.
+
+## 8. Away from home: hotspot or Tailscale
+
+**Without home Wi-Fi — the phone's hotspot** (no extra programs):
+1. Turn on the hotspot on the phone and connect the laptop to it.
+2. When Windows asks whether the PC should be discoverable on this network, choose **Yes** (that makes it private).
+3. Start the remote **after** connecting. It shows the laptop's new address.
+4. The first time, open a new link (type **L** + **Enter**) on the phone. The address is different from home, so
+   the phone gets a separate page for it.
+
+The laptop then uses the phone's mobile data for its own internet. On Android, USB tethering (cable) works the same way.
+
+**From anywhere over the internet — Tailscale** (a free extra program, installed by you):
+
+Tailscale makes a private, encrypted network between your own devices, so the phone can reach the laptop
+even on mobile data, from anywhere.
+1. Install Tailscale on the laptop (<https://tailscale.com/download>) and on the phone (App Store / Google Play),
+   and sign in with the **same account** on both.
+2. Start the remote and, in its window, type **L** + **Enter** for a new link. Under it there is also a link with an
+   address that starts with `100.`, marked **(Tailscale)**. Open that one on the phone once. It becomes another icon,
+   which works from anywhere.
+3. If that address doesn't open, Windows may count the Tailscale network as public. Allow the remote on it as in
+   section 10 (or make it private, section 11 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
+
+Don't open a port on your router to reach the remote from the internet: then anyone could try to reach it.
+Use Tailscale instead.
+
+## 9. Add your own apps and websites
 
 Open `config.ini`: right-click → **Open with** → **Notepad**. Find the `[programs]` section:
 
@@ -154,26 +253,14 @@ YouTube = https://www.youtube.com
 Google = https://www.google.com
 ```
 
-Each line is one button on the phone: **left of `=` is the button name, right of it is what opens.**
-That can be:
+Each line is one button on the phone: **left of `=` is the button name, right of it is what opens** —
+a program (`C:\Program Files\VideoLAN\VLC\vlc.exe`), a website (`https://…`), or a folder or file (`D:\Movies`).
 
-- **a program**: the path to an `.exe` file, e.g. `C:\Program Files\VideoLAN\VLC\vlc.exe`
-- **a website**: an address that starts with `https://`
-- **a folder or file**: e.g. `D:\Movies` or `C:\Users\Mark\Documents\list.xlsx`
+After a change, **save the file (Ctrl+S)** and refresh the page on the phone. No restart needed.
 
-After a change, **save the file (Ctrl+S)**. You don't need to restart the server, just refresh the
-page on the phone (pull it down, or open it again).
-
-**How to find the path to a program:**
-
-1. Press the **Windows** key and type the program's name (e.g. `Chrome`).
-2. Right-click it → **Open file location**.
-   If a folder with a shortcut opens, right-click the shortcut → **Open file location** again.
-3. When you see the real `.exe` file, hold **Shift**, right-click the file → **Copy as path**.
-4. In `config.ini`, write `Name =` and paste (**Ctrl+V**). You don't have to remove the quotes
-   Windows adds, they are removed automatically.
-
-Examples you can copy:
+**How to find the path to a program:** press the **Windows** key, type its name, right-click it →
+**Open file location** (if you get a shortcut, right-click it → **Open file location** again). Hold **Shift**,
+right-click the `.exe` file → **Copy as path**, and paste it after `Name =`. The quotes are removed automatically.
 
 ```ini
 Chrome = C:\Program Files\Google\Chrome\Application\chrome.exe
@@ -183,189 +270,141 @@ Netflix = https://www.netflix.com
 Movies = D:\Movies
 ```
 
-Notes:
-- A line that starts with `;` is a comment and doesn't create a button. You can use that to turn a line off for a while.
-- `%USERPROFILE%` is your user folder (`C:\Users\YourName`), and `%APPDATA%` is the hidden folder
-  `C:\Users\YourName\AppData\Roaming`.
-- If Spotify was installed from the Microsoft Store, the path above won't work. Then write
-  `Spotify = spotify:` (that opens the Spotify app).
-- If a line is not written correctly (e.g. the `=` is missing), that line is skipped, and a warning
-  with the line number is shown both in the black window and on the phone, below the app buttons.
-- The phone can open **only what is on this list**, nothing else.
+- A line that starts with `;` is a comment (no button).
+- Spotify from the Microsoft Store: write `Spotify = spotify:`.
+- A line written wrongly (e.g. without `=`) is skipped, and a warning with its line number is shown in the black
+  window and on the phone.
+- The phone can open **only what is on this list**.
 
-## 6. Windows Firewall — allow it only on private networks
+## 10. Windows Firewall — allow it only on private networks
 
-The firewall has to let the phone connect to the laptop. Allow it **only on private (home)
-networks**, not on public networks (café, hotel, airport).
+The firewall has to let the phone connect to the laptop. Allow it **only on private (home) networks**.
 
-### Option A — when the window appears by itself (on the first start)
+**Option A — when the window appears by itself (first start):** in the window
+**"Windows Defender Firewall has blocked some features of this app"** tick **only Private networks**,
+untick **Public networks**, and click **Allow access**.
 
-When you start `start.bat` for the first time, Windows shows the window
-**"Windows Defender Firewall has blocked some features of this app"**:
-
-1. Tick **only** **Private networks**.
-2. **Untick** **Public networks**.
-3. Click **Allow access**. If Windows asks for an administrator password, enter it.
-
-### Option B — by hand (if the window didn't appear, or you closed it)
-
+**Option B — by hand:**
 1. Press **Windows + R**, type `firewall.cpl` and press **Enter**.
-2. On the left, click **Allow an app or feature through Windows Defender Firewall**.
-3. Click **Change settings** at the top right.
-4. Find **Python** in the list (there may be more than one, e.g. "Python" and "python.exe"). For each one,
-   tick the **Private** column and leave the **Public** column **empty**.
-5. If Python is not in the list: **Allow another app…** → **Browse…** → choose `python.exe` →
-   **Network types…** → tick only **Private** → **OK** → **Add**.
-   (Where is `python.exe`? In a black `cmd` window type `where python`; the first path is the one.)
-6. Click **OK**.
+2. On the left, click **Allow an app or feature through Windows Defender Firewall** → **Change settings**.
+3. Find **Python** (there may be several). Tick **Private**, leave **Public** empty. If Python is not in the list:
+   **Allow another app…** → **Browse…** → `python.exe` (in a `cmd` window, `where python` shows where it is) →
+   **Network types…** → only **Private** → **Add**.
+4. Click **OK**.
 
-### Option C — with one command (for advanced users)
-
-Press the **Windows** key, type `powershell`, right-click **Windows PowerShell** →
-**Run as administrator**, and paste:
+**Option C — one command** (Windows key → type `powershell` → right-click **Windows PowerShell** → **Run as administrator**):
 
 ```powershell
 New-NetFirewallRule -DisplayName "Laptop Remote" -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow -Profile Private
 ```
 
-This opens only port 8765 and only on private networks. To delete that rule later:
+To remove it later: `Remove-NetFirewallRule -DisplayName "Laptop Remote"`
 
-```powershell
-Remove-NetFirewallRule -DisplayName "Laptop Remote"
-```
+**If you clicked "Cancel" in the firewall window**, Windows created a rule that **blocks** Python (and it is
+stronger than an allowing rule). Press **Windows + R**, type `wf.msc`, open **Inbound Rules**, right-click every
+**Python** rule with a **red sign** → **Delete**. Start the remote again and follow option A.
 
-### If you clicked "Cancel" in the firewall window
+> If your antivirus has its own firewall (ESET, Kaspersky, Bitdefender, Norton…), allow Python there (home network only).
 
-Then Windows creates a rule that **blocks** Python, and a blocking rule is stronger than a rule
-that allows. Delete it:
+## 11. Make your network "private"
 
-1. Press **Windows + R**, type `wf.msc` and press **Enter**.
-2. On the left, click **Inbound Rules**.
-3. In the list, look for rules named **Python** (or **python.exe**) that have a **red sign**
-   (that means Block). Right-click each of them → **Delete**.
-4. Close the black server window and start `start.bat` again. The firewall window appears again;
-   then follow option A.
+The permission from section 10 only works if your home Wi-Fi is marked as **private** in Windows.
 
-> If you use an antivirus with its own firewall (e.g. ESET, Kaspersky, Bitdefender, Norton),
-> give Python the permission (home network only) in that program instead.
+- **Windows 11:** Start → Settings → Network & internet → Wi-Fi → click your network → **Network profile type: Private network**.
+- **Windows 10:** Start → Settings → Network & Internet → Wi-Fi → click your network → **Network profile: Private**.
+- **PowerShell (as administrator):** `Get-NetConnectionProfile` shows the networks; then
+  `Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`
 
-## 7. Make your network "private"
+> Don't set a café, hotel or airport network to private. The remote is meant not to work there.
 
-The permission from section 6 only works if your home Wi-Fi is marked as a **private** network
-in Windows. Sometimes Windows sets it to public.
+## 12. Other settings
 
-**Windows 11:**
-1. **Start** → **Settings** → **Network & internet** → **Wi-Fi**.
-2. Click the item with your network's name (e.g. "**MyNetwork properties**").
-3. Under **Network profile type**, choose **Private network**.
-
-**Windows 10:**
-1. **Start** → **Settings** → **Network & Internet** → **Wi-Fi**.
-2. Click your network's name.
-3. Under **Network profile**, choose **Private**.
-
-**With PowerShell (as administrator):**
-
-```powershell
-Get-NetConnectionProfile
-```
-
-The `NetworkCategory` column says `Public` or `Private`, and the `InterfaceAlias` column shows the
-name of the network adapter (usually "Wi-Fi"). To change it to private:
-
-```powershell
-Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
-```
-
-> **Don't** set a network in a café, hotel or airport to private. The remote is meant not to
-> work there, and that's how it should be.
-
-## 8. Other settings (port, PIN, volume step)
-
-In `config.ini`, in the `[server]` section. After a change, close the black window and start `start.bat` again.
+In `config.ini`, section `[server]`. After a change, stop the remote and start it again.
 
 | Setting | What it does |
 |---|---|
-| `port = 8765` | The server's port. Change it only if it is already taken. If you change it, also change the number in the firewall rule from option C. |
-| `pin = 482913` | The PIN for the phone (digits only, 4 to 12). It is written automatically on the first start. **For a new random PIN**, delete the number (leave just `pin =`) and start `start.bat` again. You can also type your own PIN. |
+| `name =` | The laptop's name on the phone (and on its home screen icon). Empty = the Windows computer name. |
+| `port = 8765` | The port. Change it only if it is taken (then also in the firewall rule from option C). |
 | `volume_step = 1` | How much one tap changes the volume: 1 = 2%, 2 = 4%… up to 10. |
+| `forget_phones_after_days = 30` | A phone not used for this many days is disconnected automatically. `0` = never. |
 
-## 9. Start automatically with Windows
+The connected phones are stored in `devices.json` in the project folder. It holds only a fingerprint of each
+phone's key, not the key itself. Deleting the file disconnects all phones.
 
-After **Restart** from the phone, the server does not start again by itself, and the phone can't
-control the laptop until you start `start.bat` again. To make the server start by itself:
+## 13. Start automatically with Windows
+
+After **Restart** from the phone, the remote does not start again by itself. To make it start whenever you sign in:
 
 1. Press **Windows + R**, type `shell:startup` and press **Enter**. The **Startup** folder opens.
-2. In another window, right-click `start.bat` → **Create shortcut**.
-   On Windows 11 it is under **Show more options**.
-3. Drag the new shortcut into the **Startup** folder.
+2. Right-click `start.bat` → **Create shortcut** (Windows 11: under **Show more options**).
+3. Drag the shortcut into the **Startup** folder.
 
-From then on, the server starts as soon as you sign in to Windows (after you enter your Windows
-password or PIN). While the laptop is on the sign-in screen, the server isn't running yet.
+The remote starts when you sign in to Windows (not on the sign-in screen itself). Its window is always visible
+on the laptop — the remote never runs hidden.
 
-## 10. Troubleshooting
+## 14. Update to a new version
 
-**The phone can't open the page (it keeps loading, or says "site can't be reached"):**
-- Is the black server window open?
-- Is the phone on the same Wi-Fi, and not on mobile data or a "guest" network?
-- Did you type `http://` (not `https://`) and the port, e.g. `http://192.168.1.23:8765`?
-- Check the firewall ([section 6](#6-windows-firewall--allow-it-only-on-private-networks)), especially
-  the part about clicking Cancel, and that the network is private ([section 7](#7-make-your-network-private)).
-- If the server prints more than one address, try each of them. The right one usually starts with `192.168.`.
-- If a VPN is turned on on the phone or the laptop, turn it off.
-- Some routers have an "AP isolation" / "Client isolation" option turned on, which doesn't let devices
-  see each other. Turn it off in the router's settings.
+1. Stop the remote (double-click `stop.bat`).
+2. Download the new ZIP (section 2, option A) and extract it.
+3. Copy **`config.ini`** and **`devices.json`** from your old folder into the new one (replace). This keeps your apps,
+   settings and connected phones.
+4. Start the remote from the new folder.
 
-**It worked, then it stopped:**
-- The laptop may have gone to sleep, or its lid was closed. While the laptop sleeps, the server doesn't run.
-- The router may have given the laptop a new address. Check it in the black window. To keep it always
-  the same, set up a "DHCP reservation" (a fixed address) for the laptop in your router.
+## 15. Troubleshooting
 
-**Music, volume or typing don't work while the screen is locked:** while the screen is locked, Windows
-usually doesn't accept keys from other programs. If any of these don't work then, unlock the laptop.
-Shut down and restart work even when the screen is locked.
+**The phone can't open the page (it keeps loading, or "site can't be reached"):**
+- Is the remote running on the laptop (black window, or the VS Code terminal)?
+- Is the phone on the same Wi-Fi (not mobile data, not a "guest" network)? Is a VPN on? Turn it off.
+- Check the firewall ([section 10](#10-windows-firewall--allow-it-only-on-private-networks)), especially the part
+  about "Cancel", and that the network is private ([section 11](#11-make-your-network-private)).
+- Try the other addresses the window shows. Some routers have "AP isolation" / "Client isolation" turned on,
+  which hides devices from each other — turn it off in the router.
 
-**"Wrong PIN":** check the PIN in the black window (or in `config.ini`) and enter it again.
-There is also a **Change PIN** button at the bottom of the page. After 5 wrong attempts, the phone is
-blocked for 5 minutes (protection against guessing).
+**"This link has expired or was already used":** in the remote's window type **L** + **Enter** and use the new link.
 
-**A music button doesn't work:** play/pause and next/previous work like the media keys on a keyboard,
-with programs that support them (Spotify, YouTube in a browser, VLC, Windows Media Player…). If nothing
-is playing, there is nothing for the command to act on.
+**"Connect this phone" appears although the phone was connected:** the phone was disconnected (from Settings,
+with **D**, or after 30 days unused), or the laptop got a new address from the router. Get a new link (**L** + **Enter**).
+To keep the address always the same, set a "DHCP reservation" for the laptop in your router.
 
-**Text isn't typed:**
-- An input window must be active on the laptop (with a blinking cursor).
-- If the active program was started **as administrator**, Windows doesn't let normal programs type into it.
-  Then also start `start.bat` with right-click → **Run as administrator**.
+**"No connection to the laptop":** the remote is stopped, the laptop is asleep (or its lid is closed), or the
+phone is on another network.
 
-**A program opens behind other windows** (it only flashes on the taskbar): Windows sometimes does this to
-protect the window you are working in. Click the program on the taskbar.
+**The phone can still control the laptop after you stopped it:** another copy is still running somewhere.
+Double-click `stop.bat`, it stops every copy.
 
-**An app button shows an error:** check the path in `config.ini` (does the file really exist there?).
-The exact error is shown on the phone and in the black window.
+**Screen picture is black, or says the screen may be locked:** the laptop screen is locked or asleep. Windows
+doesn't let programs see the lock screen, the sign-in screen or "Do you want to allow this app to make changes"
+windows. Unlock the laptop.
 
-**"Python is not installed, or it was not added to PATH":** repeat the installation from
-[section 1](#1-install-python). With the classic installer, make sure to tick "Add python.exe to PATH".
+**The screen picture is slow:** choose **Fast**. A weak Wi-Fi signal makes it slower.
 
-**"the remote is already running on this laptop":** it is already running in another black window or
-VS Code terminal. Use that one, or stop it there first (Ctrl+C or close the window).
+**Only one screen is shown:** with several monitors, the remote shows and clicks on the main one.
 
-**"the server cannot start on port 8765":** another program is using this port. Close it, or change the
-`port` in `config.ini`.
+**Music, volume, keys or the mouse don't work while the screen is locked:** Windows doesn't accept them then. Unlock it.
 
-**The phone can still control the laptop after you stopped the server:** another copy is still running
-somewhere (e.g. a minimized black window). Press **Ctrl+Shift+Esc** to open Task Manager, click each
-**Python** entry and click **End task**.
+**Typing, keys or clicks don't work in one program:** if that program runs **as administrator**, Windows doesn't let
+normal programs control it. Then also start `start.bat` with right-click → **Run as administrator**.
 
-**You started a shutdown by accident:** shut down and restart begin after 5 seconds. During that time,
-on the laptop press **Windows + R**, type `shutdown /a` and press **Enter** to cancel.
+**A program opens behind other windows:** Windows sometimes protects the window you are working in. Click it on the taskbar.
 
-## 11. Security
+**"the remote is already running on this laptop":** use the window where it already runs, or double-click `stop.bat` and start again.
 
-- The server accepts commands **only from devices on the home (private) network**, and only with the right PIN.
-- After 5 wrong PINs, the device is blocked for 5 minutes.
-- The phone can open only the apps and websites on your list in `config.ini`.
-- The PIN is stored in `config.ini`, so don't send that file to other people.
-- The connection is plain `http` (not encrypted), which is fine on a home network you trust. Don't use the
-  remote on public networks — that's why the firewall permission is for private networks only.
-- When you're not using it, just close the black server window.
+**"the server cannot start on port 8765":** another program uses that port. Close it, or change `port` in `config.ini`.
+
+**"Python is not installed, or it was not added to PATH":** repeat [section 1](#1-install-python).
+
+**A shutdown started by accident:** within 5 seconds, on the laptop press **Windows + R**, type `shutdown /a`, press **Enter**.
+
+## 16. Security
+
+- **No PIN to guess.** A phone connects with a link that works **once**, for **15 minutes**. Then the phone gets its own
+  long secret key. The laptop stores only a fingerprint of it.
+- **You can take access away at any time:** disconnect one phone or all phones (phone Settings, or **D** in the window).
+  Phones not used for 30 days are disconnected automatically.
+- **The remote is always visible on the laptop.** Its window shows every action. While a phone watches the screen,
+  the window says `SCREEN VIEW started on …` and its title changes to **"SCREEN IS BEING VIEWED"**.
+- Only devices on your home network (or your own Tailscale network) can reach it. 5 failed attempts block a device for 5 minutes.
+- The phone can open only the apps on your list.
+- On the home Wi-Fi the connection is plain `http` (not encrypted). That is fine on a home network you trust; don't use the
+  remote on public networks. Over Tailscale the connection is encrypted.
+- Use the remote only on your own computers.
