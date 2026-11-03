@@ -2,40 +2,45 @@
 Laptop Remote — web server.
 
 Start it by double-clicking start.bat (or with the command:  py server.py ).
-On a phone on the same Wi-Fi, open the address the server prints.
+Stop it with Ctrl+C, by typing Q + Enter in its window, from the phone, or
+by double-clicking stop.bat (which runs:  py server.py --stop ).
 Uses only the Python standard library.
 """
 
+import hashlib
 import hmac
 import ipaddress
 import json
 import locale
 import mimetypes
+import os
 import queue
-import re
 import secrets
 import socket
+import subprocess
 import sys
 import threading
 import time
+import urllib.request
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import actions
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = (BASE_DIR / "web").resolve()
 CONFIG_FILE = BASE_DIR / "config.ini"
+DEVICES_FILE = BASE_DIR / "devices.json"
 
 DEFAULT_PORT = 8765
 MAX_TEXT_LENGTH = 5000
-MAX_WRONG_PINS = 5
+MAX_FAILURES = 5
 LOCKOUT_SECONDS = 300
 SHUTDOWN_DELAY_SECONDS = 5
-
-PIN = ""
-_wrong_pins = {}  # ip -> (number of wrong attempts, blocked until)
-_pin_lock = threading.Lock()
+LINK_MINUTES = 15
+TAILSCALE_NETWORK = ipaddress.ip_network("100.64.0.0/10")
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +120,16 @@ def parse_ini(text):
     return sections, warnings
 
 
+def _number(settings, key, default, low, high, warnings):
+    value = settings.get(key, "")
+    if not value:
+        return default
+    if value.isdigit() and low <= int(value) <= high:
+        return int(value)
+    warnings.append(f"{key} “{value}” must be a number from {low} to {high}, using {default}")
+    return default
+
+
 def _load_config():
     warnings = []
     try:
@@ -129,21 +144,6 @@ def _load_config():
     warnings += w
 
     srv = {k.lower(): v for k, v in sections.get("server", {}).items()}
-
-    port = DEFAULT_PORT
-    if srv.get("port"):
-        if srv["port"].isdigit() and 1 <= int(srv["port"]) <= 65535:
-            port = int(srv["port"])
-        else:
-            warnings.append(f"port “{srv['port']}” is not a valid number, using {DEFAULT_PORT}")
-
-    step = 1
-    if srv.get("volume_step"):
-        if srv["volume_step"].isdigit() and 1 <= int(srv["volume_step"]) <= 10:
-            step = int(srv["volume_step"])
-        else:
-            warnings.append(f"volume_step “{srv['volume_step']}” must be a number from 1 to 10, using 1")
-
     programs = {}
     for name, target in sections.get("programs", {}).items():
         if target:
@@ -152,9 +152,10 @@ def _load_config():
             warnings.append(f"“{name}” has no path or address after the = sign, skipped")
 
     return {
-        "port": port,
-        "pin": srv.get("pin", ""),
-        "volume_step": step,
+        "name": (srv.get("name") or socket.gethostname())[:40],
+        "port": _number(srv, "port", DEFAULT_PORT, 1, 65535, warnings),
+        "volume_step": _number(srv, "volume_step", 1, 1, 10, warnings),
+        "forget_days": _number(srv, "forget_phones_after_days", 30, 0, 3650, warnings),
         "programs": programs,
         "warnings": warnings,
     }
@@ -184,52 +185,124 @@ def config(first_time=False):
     return data
 
 
-def save_pin(pin):
-    """Write the PIN into config.ini (the  pin =  line in [server]). Return True on success."""
+# ---------------------------------------------------------------------------
+# Connected phones
+#
+# A phone connects with a link that works only once and only for a few
+# minutes. The phone then gets its own secret key. The laptop stores only a
+# fingerprint (hash) of that key in devices.json, so the file is of no use
+# to anyone who copies it. Disconnecting a phone deletes its entry.
+# ---------------------------------------------------------------------------
+
+_devices = []
+_devices_lock = threading.Lock()
+_link_codes = {}  # code -> valid until (only in memory: links die when the remote stops)
+
+
+def _fingerprint(key):
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def load_devices():
+    global _devices
     try:
-        try:
-            text, encoding = _decode(CONFIG_FILE.read_bytes())
-        except FileNotFoundError:
-            text, encoding = "", "utf-8"
-        newline = "\n" if ("\n" in text and "\r\n" not in text) else "\r\n"
-        lines = text.splitlines()
-        section, server_line, replaced = None, None, False
-        for i, line in enumerate(lines):
-            s = line.strip()
-            if s.startswith("[") and s.endswith("]"):
-                section = s[1:-1].strip().lower()
-                if section == "server" and server_line is None:
-                    server_line = i
-                continue
-            if section == "server" and not s.startswith((";", "#")):
-                name, equals, _ = s.partition("=")
-                if equals and name.strip().lower() == "pin":
-                    lines[i] = f"pin = {pin}"
-                    replaced = True
-                    break
-        if not replaced:
-            if server_line is not None:
-                lines.insert(server_line + 1, f"pin = {pin}")
-            else:
-                lines[0:0] = ["[server]", f"pin = {pin}", ""]
-        CONFIG_FILE.write_bytes((newline.join(lines) + newline).encode(encoding))
-        return True
-    except (OSError, UnicodeError):
-        return False
+        data = json.loads(DEVICES_FILE.read_text(encoding="utf-8"))
+        devices = [d for d in data.get("devices", []) if isinstance(d, dict) and d.get("key")]
+    except FileNotFoundError:
+        devices = []
+    except (OSError, ValueError, AttributeError):
+        print("  WARNING: devices.json could not be read, phones have to connect again.")
+        devices = []
+    with _devices_lock:
+        _devices = devices
 
 
-def prepare_pin(data):
-    """Return (pin, note to print)."""
-    pin = data["pin"]
-    if pin and re.fullmatch(r"[0-9]{4,12}", pin):
-        return pin, ""
-    new_pin = f"{secrets.randbelow(10 ** 6):06d}"
-    if pin:
-        return new_pin, ("The PIN in config.ini is not valid (only 4 to 12 digits are allowed).\n"
-                         "  The temporary PIN above works this time. Fix the PIN in config.ini.")
-    if save_pin(new_pin):
-        return new_pin, "First start: a PIN was created and saved in config.ini.\n  It stays the same next time."
-    return new_pin, "The PIN could not be saved in config.ini, so it only works while the server runs."
+def _save_devices():
+    """Call with _devices_lock held."""
+    try:
+        temp = DEVICES_FILE.with_suffix(".tmp")
+        temp.write_text(json.dumps({"devices": _devices}, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(temp, DEVICES_FILE)
+    except OSError as e:
+        log(f"WARNING: cannot save devices.json ({e})")
+
+
+def new_link_code():
+    code = secrets.token_urlsafe(18)
+    now = time.time()
+    with _devices_lock:
+        for old in [c for c, until in _link_codes.items() if until < now]:
+            del _link_codes[old]
+        _link_codes[code] = now + LINK_MINUTES * 60
+    return code
+
+
+def connect_device(code, name, via):
+    """Use a link code. Return (key, device) or None if the link is not valid."""
+    with _devices_lock:
+        until = _link_codes.pop(code, None)  # a link works only once
+        if not until or until < time.time():
+            return None
+        key = secrets.token_urlsafe(32)
+        device = {
+            "id": secrets.token_hex(4),
+            "name": name,
+            "via": via,
+            "key": _fingerprint(key),
+            "connected": time.time(),
+            "last_used": time.time(),
+        }
+        _devices.append(device)
+        _save_devices()
+    return key, device
+
+
+def find_device(key):
+    if not key:
+        return None
+    fingerprint = _fingerprint(key)
+    with _devices_lock:
+        for device in _devices:
+            if hmac.compare_digest(device["key"], fingerprint):
+                if time.time() - device.get("last_used", 0) > 60:
+                    device["last_used"] = time.time()
+                    _save_devices()
+                return device
+    return None
+
+
+def device_list():
+    with _devices_lock:
+        return [{k: d.get(k) for k in ("id", "name", "via", "connected", "last_used")} for d in _devices]
+
+
+def forget_device(device_id):
+    with _devices_lock:
+        before = len(_devices)
+        _devices[:] = [d for d in _devices if d["id"] != device_id]
+        _save_devices()
+        return before - len(_devices)
+
+
+def forget_all_devices():
+    with _devices_lock:
+        count = len(_devices)
+        _devices.clear()
+        _link_codes.clear()  # links that were not used yet stop working too
+        _save_devices()
+        return count
+
+
+def forget_unused_devices(days):
+    if days <= 0:
+        return []
+    limit = time.time() - days * 86400
+    with _devices_lock:
+        old = [d["name"] for d in _devices if d.get("last_used", 0) < limit]
+        if old:
+            _devices[:] = [d for d in _devices if d.get("last_used", 0) >= limit]
+            _save_devices()
+        return old
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +327,24 @@ def laptop_addresses():
     return addresses or ["127.0.0.1"]
 
 
+def is_tailscale(ip):
+    try:
+        return ipaddress.ip_address(ip) in TAILSCALE_NETWORK
+    except ValueError:
+        return False
+
+
+def is_allowed_client(ip):
+    """Only devices on the home (private) network, or on your Tailscale network, are allowed."""
+    try:
+        a = ipaddress.ip_address(ip)
+        if a.version == 6 and a.ipv4_mapped:
+            a = a.ipv4_mapped
+        return a.is_private or a.is_loopback or a.is_link_local or a in TAILSCALE_NETWORK
+    except ValueError:
+        return False
+
+
 def already_running(port):
     """True if something on this laptop already answers on the port (e.g. another copy of the remote)."""
     try:
@@ -271,15 +362,48 @@ class RemoteServer(ThreadingHTTPServer):
     allow_reuse_address = not actions.ON_WINDOWS
 
 
-def is_home_network(ip):
-    """Only devices on the home (private) network are allowed."""
-    try:
-        a = ipaddress.ip_address(ip)
-        if a.version == 6 and a.ipv4_mapped:
-            a = a.ipv4_mapped
-        return a.is_private or a.is_loopback or a.is_link_local
-    except ValueError:
-        return False
+# ---------------------------------------------------------------------------
+# Who is watching the screen (shown in the server window)
+# ---------------------------------------------------------------------------
+
+_viewers = {}  # device id -> (name, time of the last picture)
+_viewers_lock = threading.Lock()
+
+
+def _update_title():
+    with _viewers_lock:
+        watching = bool(_viewers)
+    actions.set_window_title("Laptop Remote — SCREEN IS BEING VIEWED" if watching else "Laptop Remote")
+
+
+def screen_viewed_by(device):
+    with _viewers_lock:
+        new = device["id"] not in _viewers
+        _viewers[device["id"]] = (device["name"], time.time())
+    if new:
+        log(f"SCREEN VIEW started on {device['name']}")
+        _update_title()
+
+
+def _watch_viewers():
+    while True:
+        time.sleep(2)
+        with _viewers_lock:
+            gone = [(i, n) for i, (n, seen) in _viewers.items() if time.time() - seen > 6]
+            for i, _ in gone:
+                del _viewers[i]
+        for _, name in gone:
+            log(f"screen view stopped on {name}")
+        if gone:
+            _update_title()
+
+
+def _forget_unused_regularly():
+    while True:
+        time.sleep(3600)
+        days = config()["forget_days"]
+        for name in forget_unused_devices(days):
+            log(f"disconnected (not used for {days} days): {name}")
 
 
 # ---------------------------------------------------------------------------
@@ -288,9 +412,22 @@ def is_home_network(ip):
 
 MEDIA = {"previous": "Previous track", "play_pause": "Play / Pause", "next": "Next track"}
 VOLUME = {"volume_down": "Volume down", "volume_up": "Volume up", "mute": "Mute on / off"}
+QUIET = {"mouse_move", "scroll", "mouse_button"}  # too frequent to write into the window
 
 
-def run_command(data):
+def _fraction(value):
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1:
+        return float(value)
+    raise ValueError("Invalid position.")
+
+
+def _integer(value, low, high):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return max(low, min(high, int(value)))
+    raise ValueError("Invalid number.")
+
+
+def run_command(data, device, server):
     """Run a command and return a message for the phone. ValueError = bad request."""
     command = data.get("command")
     if not isinstance(command, str):
@@ -334,6 +471,54 @@ def run_command(data):
         actions.type_text(text, data.get("enter") is True)
         return "Text typed"
 
+    if command == "key":
+        name = data.get("key")
+        if name not in actions.SPECIAL_KEYS:
+            raise ValueError("Unknown key.")
+        actions.press_key(name)
+        return "Key pressed"
+
+    if command == "mouse_move":
+        actions.mouse_move(_integer(data.get("dx", 0), -3000, 3000), _integer(data.get("dy", 0), -3000, 3000))
+        return "Moved"
+
+    if command == "click":
+        button = data.get("button", "left")
+        if button not in actions.MOUSE_BUTTONS:
+            raise ValueError("Unknown mouse button.")
+        x = y = None
+        if data.get("x") is not None or data.get("y") is not None:
+            x, y = _fraction(data.get("x")), _fraction(data.get("y"))
+        actions.click(button, x, y, data.get("double") is True)
+        return "Click"
+
+    if command == "mouse_button":
+        button = data.get("button", "left")
+        if button not in actions.MOUSE_BUTTONS:
+            raise ValueError("Unknown mouse button.")
+        actions.mouse_button(button, data.get("pressed") is True)
+        return "Holding the button" if data.get("pressed") is True else "Button released"
+
+    if command == "scroll":
+        actions.scroll(_integer(data.get("amount", 0), -2400, 2400), data.get("horizontal") is True)
+        return "Scrolled"
+
+    if command == "forget_me":
+        forget_device(device["id"])
+        return "This phone is disconnected"
+
+    if command == "forget_all":
+        if data.get("confirmed") is not True:
+            raise ValueError("Confirmation on the phone is required.")
+        count = forget_all_devices()
+        return f"Disconnected phones: {count}"
+
+    if command == "stop_remote":
+        if data.get("confirmed") is not True:
+            raise ValueError("Confirmation on the phone is required.")
+        threading.Thread(target=server.shutdown, daemon=True).start()
+        return "The remote on the laptop is stopping"
+
     raise ValueError(f"Unknown command: {command}")
 
 
@@ -341,9 +526,15 @@ def run_command(data):
 # HTTP
 # ---------------------------------------------------------------------------
 
+_failures = {}  # ip -> (number of failed attempts, blocked until)
+_failures_lock = threading.Lock()
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LaptopRemote/1.1"
+    server_version = "LaptopRemote/2.0"
     sys_version = ""
+    protocol_version = "HTTP/1.1"  # keep the connection open: the mouse reacts faster
+    timeout = 30
 
     def log_message(self, format, *args):
         pass  # we print our own, shorter log lines
@@ -351,55 +542,67 @@ class Handler(BaseHTTPRequestHandler):
     def _log(self, text):
         log(f"{self.client_address[0]:<15}  {text}")
 
-    def _reply(self, status, body, content_type="application/json; charset=utf-8"):
+    def _reply(self, status, body=b"", content_type="application/json; charset=utf-8", headers=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode("utf-8")
         try:
             self.send_response(status)
-            self.send_header("Content-Type", content_type)
+            if body or status != 204:
+                self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(body)
+            if body:
+                self.wfile.write(body)
         except OSError:
-            pass  # the phone closed the connection
+            self.close_connection = True  # the phone closed the connection
 
     # ---- checks ----
 
-    def _device_allowed(self):
-        if is_home_network(self.client_address[0]):
+    def _client_allowed(self):
+        if is_allowed_client(self.client_address[0]):
             return True
         self._log("REFUSED: device is not on the home network")
-        self._reply(403, {"error": "Access is allowed only from the home network."})
+        self.close_connection = True
+        self._reply(403, {"error": "Access is allowed only from the home network or your Tailscale network."})
         return False
 
-    def _check_pin(self):
+    def _blocked(self):
+        """Seconds this device still has to wait after too many failed attempts (0 = none)."""
+        with _failures_lock:
+            _, until = _failures.get(self.client_address[0], (0, 0))
+        return int(until - time.time()) + 1 if until > time.time() else 0
+
+    def _failed(self, what):
         ip = self.client_address[0]
-        now = time.time()
-        given = self.headers.get("X-PIN", "")
-        with _pin_lock:
-            count, blocked_until = _wrong_pins.get(ip, (0, 0))
-            if blocked_until > now:
-                wait = int(blocked_until - now) + 1
-            elif PIN and hmac.compare_digest(given.encode("utf-8"), PIN.encode("utf-8")):
-                _wrong_pins.pop(ip, None)
-                return True
+        with _failures_lock:
+            count, _ = _failures.get(ip, (0, 0))
+            count += 1
+            if count >= MAX_FAILURES:
+                _failures[ip] = (0, time.time() + LOCKOUT_SECONDS)
+                self._log(f"WARNING: {count} failed attempts, device blocked for {LOCKOUT_SECONDS // 60} min")
             else:
-                wait = 0
-                count += 1
-                if count >= MAX_WRONG_PINS:
-                    _wrong_pins[ip] = (0, now + LOCKOUT_SECONDS)
-                    self._log(f"WARNING: {count} wrong PINs, device blocked for {LOCKOUT_SECONDS // 60} min")
-                else:
-                    _wrong_pins[ip] = (count, 0)
-                    self._log("wrong PIN")
+                _failures[ip] = (count, 0)
+                self._log(what)
+
+    def _device(self):
+        """The connected phone making this request, or None (and an error reply)."""
+        wait = self._blocked()
         if wait:
-            self._reply(429, {"error": f"Too many wrong PINs. Wait {wait} s and try again."})
-        else:
-            self._reply(401, {"error": "Wrong PIN."})
-        return False
+            self._reply(429, {"error": f"Too many failed attempts. Wait {wait} s and try again."})
+            return None
+        device = find_device(self.headers.get("X-Key", ""))
+        if device:
+            with _failures_lock:
+                _failures.pop(self.client_address[0], None)
+            return device
+        self._failed("unknown phone (not connected, or disconnected)")
+        self._reply(401, {"error": "This phone is not connected to this laptop."})
+        return None
 
     # ---- GET ----
 
@@ -410,20 +613,34 @@ class Handler(BaseHTTPRequestHandler):
             self._unexpected_error(e)
 
     def _get(self):
-        if not self._device_allowed():
+        if not self._client_allowed():
             return
-        path = self.path.split("?", 1)[0]
+        url = urlsplit(self.path)
+        path = url.path
 
         if path == "/api/check":
-            if self._check_pin():
-                self._log("phone connected")
-                self._reply(200, {"ok": True, "laptop": socket.gethostname(), "test_mode": actions.TEST_MODE})
+            device = self._device()
+            if device:
+                c = config()
+                self._reply(200, {"ok": True, "laptop": c["name"], "phone": device["name"], "phone_id": device["id"],
+                                  "test_mode": actions.TEST_MODE, "screen": list(actions.screen_size())})
             return
 
         if path == "/api/programs":
-            if self._check_pin():
+            if self._device():
                 c = config()
                 self._reply(200, {"programs": list(c["programs"]), "warnings": c["warnings"]})
+            return
+
+        if path == "/api/phones":
+            if self._device():
+                self._reply(200, {"phones": device_list(), "forget_days": config()["forget_days"]})
+            return
+
+        if path == "/api/screen":
+            device = self._device()
+            if device:
+                self._screen(device, parse_qs(url.query))
             return
 
         # The phone page (files from the web folder)
@@ -443,6 +660,28 @@ class Handler(BaseHTTPRequestHandler):
             content_type += "; charset=utf-8"
         self._reply(200, file.read_bytes(), content_type)
 
+    def _screen(self, device, query):
+        try:
+            max_width = max(320, min(3840, int(query.get("w", ["1280"])[0])))
+        except ValueError:
+            max_width = 1280
+        last = query.get("last", [""])[0]
+        screen_viewed_by(device)
+        try:
+            pixels, width, height = actions.capture_screen(max_width)
+        except actions.ActionError as e:
+            self._reply(503, {"error": str(e)})
+            return
+        frame = f"{zlib.crc32(pixels) & 0xFFFFFFFF:08x}-{width}x{height}"
+        headers = {"X-Frame": frame}
+        cursor = actions.cursor_position()
+        if cursor:
+            headers["X-Cursor"] = f"{cursor[0]:.4f},{cursor[1]:.4f}"
+        if last == frame:
+            self._reply(204, headers=headers)  # the picture did not change
+            return
+        self._reply(200, actions.encode_png(pixels, width, height), "image/png", headers)
+
     # ---- POST ----
 
     def do_POST(self):
@@ -452,22 +691,34 @@ class Handler(BaseHTTPRequestHandler):
             self._unexpected_error(e)
 
     def _post(self):
-        if not self._device_allowed():
+        if not self._client_allowed():
             return
-        # The request body is read before the PIN check, so the reply always reaches the phone.
+        # The request body is read first, so the reply always reaches the phone.
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = -1
         if not 0 <= length <= 100_000:
+            self.close_connection = True
             self._reply(400, {"error": "Invalid request."})
             return
         raw = self.rfile.read(length) if length else b""
+        path = urlsplit(self.path).path
 
-        if self.path.split("?", 1)[0] != "/api/command":
-            self._reply(404, {"error": "Not found."})
+        if path == "/api/local/stop":
+            # Used by stop.bat on this laptop. The header makes sure no website can do it.
+            port = self.server.server_address[1]
+            if (self.client_address[0] == "127.0.0.1" and self.headers.get("X-Local-Stop") == "1"
+                    and self.headers.get("Host") == f"127.0.0.1:{port}"):
+                self._reply(200, {"ok": True})
+                log("stop.bat asked the remote to stop")
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+            else:
+                self._reply(403, {"error": "Not allowed."})
             return
-        if not self._check_pin():
+
+        if path not in ("/api/connect", "/api/command"):
+            self._reply(404, {"error": "Not found."})
             return
         try:
             data = json.loads(raw.decode("utf-8") or "{}")
@@ -477,9 +728,16 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(400, {"error": "Invalid request."})
             return
 
+        if path == "/api/connect":
+            self._connect(data)
+            return
+
+        device = self._device()
+        if not device:
+            return
         command = data.get("command")
         try:
-            message = run_command(data)
+            message = run_command(data, device, self.server)
         except ValueError as e:
             self._log(f"refused ({command}): {e}")
             self._reply(400, {"error": str(e)})
@@ -489,78 +747,199 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(500, {"error": str(e)})
             return
         self._reply(200, {"ok": True, "message": message})
-        extra = f" → {data.get('name')}" if command == "open" else ""
-        if actions.TEST_MODE:
-            extra += "   [test mode, nothing was executed]"
-        self._log(f"command: {command}{extra}")
+        if command in ("forget_me", "forget_all", "stop_remote"):
+            self._log(f"{device['name']}: {message}")
+        elif command not in QUIET:
+            extra = f" → {data.get('name')}" if command == "open" else ""
+            if command == "key":
+                extra = f" → {data.get('key')}"
+            if command == "click":
+                extra = f" → {data.get('button', 'left')}"
+            if actions.TEST_MODE:
+                extra += "   [test mode, nothing was executed]"
+            self._log(f"{device['name']}: {command}{extra}")
+
+    def _connect(self, data):
+        code = data.get("code")
+        name = data.get("name")
+        name = name.strip()[:40] if isinstance(name, str) and name.strip() else "Phone"
+        result = connect_device(code, name, self.headers.get("Host", "")[:60]) if isinstance(code, str) else None
+        if result:
+            key, device = result
+            with _failures_lock:
+                _failures.pop(self.client_address[0], None)
+            log(f"PHONE CONNECTED: {device['name']} (via {device['via']})")
+            self._reply(200, {"ok": True, "key": key, "laptop": config()["name"], "phone": device["name"]})
+            return
+        wait = self._blocked()
+        if wait:
+            self._reply(429, {"error": f"Too many failed attempts. Wait {wait} s and try again."})
+            return
+        self._failed("a phone used a link that is not valid")
+        self._reply(400, {"error": "This link has expired or was already used. "
+                                   "On the laptop, type L and press Enter for a new link."})
 
     def _unexpected_error(self, e):
         self._log(f"UNEXPECTED ERROR: {type(e).__name__}: {e}")
+        self.close_connection = True
         self._reply(500, {"error": f"Error on the laptop: {e}"})
 
 
 # ---------------------------------------------------------------------------
-# Start
+# The server window: links, commands, stopping
 # ---------------------------------------------------------------------------
 
+LINE = "=" * 66
+
+
+def print_link(port):
+    """Create a new one-time link for a phone, print it and put it on the clipboard."""
+    code = new_link_code()
+    addresses = laptop_addresses()
+    links = [f"http://{a}:{port}/#connect={code}" for a in addresses]
+    copied = actions.copy_to_clipboard(links[0])
+    print(f"\n  To connect a phone, open this link on it (it works once, for {LINK_MINUTES} minutes):\n")
+    print(f"      {links[0]}\n")
+    if len(links) > 1:
+        print("  If that address does not work on the phone, use one of these:")
+        for a, link in zip(addresses[1:], links[1:]):
+            print(f"      {link}" + ("   (Tailscale)" if is_tailscale(a) else ""))
+        print()
+    if copied:
+        print("  The link is already copied: paste it (Ctrl+V) into an e-mail or a message")
+        print("  to yourself, and open it on your phone.")
+    else:
+        print("  Send this link to yourself (e-mail, Viber, WhatsApp...) and open it on your phone.")
+    print(flush=True)
+
+
+def print_commands():
+    print("  Type a letter here and press Enter:")
+    print("      L   new link for a phone")
+    print("      D   disconnect all phones (their access stops working)")
+    print("      Q   stop the remote")
+    print(flush=True)
+
+
+def _console_commands(server, port):
+    while True:
+        try:
+            line = input()
+        except (EOFError, OSError, ValueError, KeyboardInterrupt):
+            return  # no keyboard (e.g. started without a window), or Ctrl+C
+        command = line.strip().lower()
+        if command == "l":
+            print_link(port)
+        elif command == "d":
+            count = forget_all_devices()
+            print(f"\n  Disconnected phones: {count}. Their access does not work any more.")
+            print("  To connect a phone again, type L and press Enter.\n", flush=True)
+        elif command == "q":
+            print("\n  Stopping...", flush=True)
+            threading.Thread(target=server.shutdown, daemon=True).start()
+            return
+        elif command:
+            print()
+            print_commands()
+
+
+def stop_running_copy(port):
+    """Stop the remote that is running on this laptop (used by stop.bat)."""
+    if not already_running(port):
+        print("\n  The remote is not running.")
+        return 0
+    try:  # ask it nicely first
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/api/local/stop", data=b"",
+                                         method="POST", headers={"X-Local-Stop": "1"})
+        opener.open(request, timeout=3).read()
+        for _ in range(20):
+            time.sleep(0.25)
+            if not already_running(port):
+                break
+    except Exception:
+        pass
+    if already_running(port) and actions.ON_WINDOWS:
+        # An older version or a stuck copy: end every program listening on the port.
+        output = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
+                                errors="replace").stdout
+        for line in output.splitlines():
+            parts = line.split()
+            if len(parts) >= 5 and parts[1].endswith(f":{port}") and parts[2] in ("0.0.0.0:0", "[::]:0"):
+                subprocess.run(["taskkill", "/F", "/PID", parts[-1]], capture_output=True)
+        time.sleep(1)
+    if already_running(port):
+        print(f"\n  Could not stop the program on port {port}. Close its window, or use")
+        print("  Task Manager (Ctrl+Shift+Esc): click Python, then End task.")
+        return 1
+    print("\n  The remote is stopped.")
+    return 0
+
+
 def main():
-    global PIN
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
-    actions.disable_quickedit()
 
     data = config(first_time=True)
-    PIN, pin_note = prepare_pin(data)
-    data = config(first_time=True)  # again, because the PIN may have just been written to the file
     port = data["port"]
+    if "--stop" in sys.argv[1:]:
+        return stop_running_copy(port)
 
+    actions.make_dpi_aware()
+    actions.disable_quickedit()
     if already_running(port):
         print(f"\nERROR: the remote is already running on this laptop (port {port}).")
         print("Use the window (or VS Code terminal) where it is already running,")
-        print("or stop it there first (Ctrl+C or close the window), then start it again.")
+        print("or stop it first: Ctrl+C in that window, or double-click stop.bat.")
         return 1
     try:
         server = RemoteServer(("0.0.0.0", port), Handler)
     except OSError as e:
         print(f"\nERROR: the server cannot start on port {port} ({e}).")
-        print("Another program is using this port. Close it,")
-        print("or change the port number in config.ini.")
+        print("Another program is using this port. Close it, or change the port number in config.ini.")
         return 1
-    threading.Thread(target=_writer, daemon=True).start()
 
+    load_devices()
+    forgotten = forget_unused_devices(data["forget_days"])
+    phones = device_list()
     addresses = laptop_addresses()
-    line = "=" * 62
-    print(line)
-    print("  LAPTOP REMOTE — the server is running")
-    print(line)
-    print("  On your phone (on the same Wi-Fi), open this address in the browser:\n")
-    print(f"      http://{addresses[0]}:{port}\n")
-    if len(addresses) > 1:
-        print("  If that address does not work, try one of these:")
-        for a in addresses[1:]:
-            print(f"      http://{a}:{port}")
-        print()
-    print(f"  PIN for the phone:   {PIN}")
-    if pin_note:
-        print(f"  {pin_note}")
-    print(f"\n  Apps on the list: {len(data['programs'])} (the list is in config.ini)")
+
+    print(LINE)
+    print(f"  LAPTOP REMOTE — running on “{data['name']}”")
+    print(LINE)
+    for name in forgotten:
+        print(f"  Disconnected (not used for {data['forget_days']} days): {name}")
+    if phones:
+        print(f"  Connected phones: {', '.join(p['name'] for p in phones)}")
+        print(f"  They can simply open:  http://{addresses[0]}:{port}")
+    else:
+        print("  No phone is connected to this laptop yet.")
+        print_link(port)
+    print(f"  Apps on the list: {len(data['programs'])} (the list is in config.ini)")
     for w in data["warnings"]:
         print(f"  WARNING in config.ini, {w}")
     if actions.TEST_MODE:
         print("\n  TEST MODE: this is not Windows, commands are only logged.")
-    print(line)
-    print("  Keep this window open while you use the remote (you can")
-    print("  minimize it). To stop the server, close the window or press Ctrl+C.")
-    print(line + "\n", flush=True)
+    print(LINE)
+    print_commands()
+    print("  Keep this window open while you use the remote (you can minimize it).")
+    print("  To stop: type Q and Enter, press Ctrl+C, close the window, or run stop.bat.")
+    print(LINE + "\n", flush=True)
 
+    threading.Thread(target=_writer, daemon=True).start()
+    threading.Thread(target=_watch_viewers, daemon=True).start()
+    threading.Thread(target=_forget_unused_regularly, daemon=True).start()
+    threading.Thread(target=_console_commands, args=(server, port), daemon=True).start()
+    actions.set_window_title("Laptop Remote")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nThe server has stopped.")
+        pass
     finally:
         server.server_close()
+    print("\nThe remote has stopped. Phones stay connected for the next time you start it.", flush=True)
     return 0
 
 
