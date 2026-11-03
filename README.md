@@ -89,18 +89,21 @@ Run this long command only the first time (to update later, see [section 14](#14
 In the project folder you should see:
 
 ```
-start.bat        ← double-click to start the remote
-stop.bat         ← double-click to stop it (even if you can't find its window)
-config.ini       ← your settings and the list of apps
-server.py        ← the program itself
-actions.py       ← the actions the laptop performs
-web\index.html   ← the page the phone shows
-README.md        ← this guide
+start.bat            ← double-click to start the remote
+stop.bat             ← double-click to stop it (even if you can't find its window)
+update.bat           ← double-click to get the newest version (keeps your settings and phones)
+tailscale-https.bat  ← double-click once for the secure link with Tailscale (section 8)
+config.ini           ← your settings and the list of apps
+server.py            ← the program itself
+actions.py           ← the actions the laptop performs
+web\index.html       ← the page the phone shows
+README.md            ← this guide
 ```
 
 ## 3. Start the remote
 
-**Double-click `start.bat`** (or, in the VS Code terminal, inside the project folder: `py server.py`).
+**Double-click `start.bat`.** You don't need VS Code or any other program for it. Tip: right-click `start.bat` →
+**Send to** → **Desktop (create shortcut)**, then you can start the remote from the desktop.
 A black window opens. The first time it looks roughly like this:
 
 ```
@@ -142,6 +145,9 @@ A black window opens. The first time it looks roughly like this:
 ## 4. Connect your phone
 
 You do this **once per phone**. There is no PIN.
+
+> **Easiest of all:** with Tailscale and the secure link (section 8) there is no code either — the phone just opens the
+> link. The steps below are for the home Wi-Fi without Tailscale.
 
 1. The phone must be on the **same Wi-Fi** as the laptop (not on mobile data, not on a "guest" network).
 2. On the phone, open the browser and type the address from the black window, e.g. `http://192.168.1.23:8765`
@@ -234,26 +240,34 @@ each laptop you want to control.
 
 The laptop then uses the phone's mobile data for its own internet. On Android, USB tethering (cable) works the same way.
 
-**From anywhere over the internet (5G, another Wi-Fi) — Tailscale** (a free extra program, installed by you):
+**From anywhere over the internet (5G, another Wi-Fi) — Tailscale: the best setup**
 
 When the phone is on 5G, your home router lets nobody in from outside, so something has to connect the phone and the
-laptop. Tailscale does that: it makes a private, encrypted network of your own devices, without changing anything on
-the router. It is free for personal use.
+laptop. Tailscale does that: it makes a private, **encrypted** network of your own devices, without changing anything on
+the router. It is free for personal use. With it you also get a **secure https link with no code at all**: every device
+signed in to your Tailscale account just opens the link and can control the laptop.
 
 1. **On the laptop:** open <https://tailscale.com/download>, download Tailscale for Windows, install it and sign in
    (with a Google, Microsoft or Apple account).
 2. **On the phone:** install **Tailscale** from the App Store / Google Play, open it, sign in with the **same account**,
    and allow it to add a VPN configuration. Leave it switched on (it runs in the background).
-3. **Start the remote again** on the laptop. Its window now shows a second address, which starts with `100.` and says
-   **from anywhere, also on 5G (Tailscale)**. A code is shown too (if not, type **L** + **Enter**).
-4. **On the phone, open that `100.…` address** and type the code. Add it to the home screen (on iPhone: add the icon
-   first, open it, and type the code there).
+3. **On the laptop, double-click `tailscale-https.bat`** (only once). It asks Tailscale for a secure link.
+   - If Tailscale shows a link (because HTTPS is not turned on for your account yet), open it, click **Enable**, and
+     double-click `tailscale-https.bat` again. (The same switch is at <https://login.tailscale.com/admin/dns> →
+     **HTTPS Certificates** → **Enable HTTPS**.)
+   - If it says "Access denied", right-click `tailscale-https.bat` → **Run as administrator**.
+   - At the end it shows the link, like `https://my-laptop.tail1234.ts.net`.
+4. **Start the remote** (`start.bat`). Its window shows that link marked **BEST: from anywhere, encrypted, no code**.
+   It is also copied, so you can e-mail it to yourself.
+5. **On the phone, open that link.** That's all: no code, nothing to type. Add it to the home screen — it works there too.
 
-Tip: use the `100.…` address always, also at home — it works on Wi-Fi and on 5G, so you need only one icon.
-The laptop has to be switched on, connected to the internet, and the remote has to run on it.
+It works on Wi-Fi and on 5G, at home and away. The laptop has to be switched on, connected to the internet, and the remote
+has to run on it. Only devices signed in to **your** Tailscale account are let in this way (to turn that off, set
+`tailscale_auto_connect = no` in `config.ini`; then they need a code like any other phone).
 
-If the `100.…` address doesn't open, Windows may count the Tailscale network as public. Allow the remote on it as in
-section 10, or make it private (section 11 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
+Without step 3 you can still use Tailscale: open the address that starts with `100.` (also shown in the window) and
+type a code once. If that `100.…` address doesn't open, Windows may count the Tailscale network as public: allow the
+remote on it as in section 10, or make it private (section 11 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
 
 Don't open a port on your router to reach the remote from the internet: then anyone could try to reach it.
 Use Tailscale instead.
@@ -345,6 +359,7 @@ In `config.ini`, section `[server]`. After a change, stop the remote and start i
 | `port = 8765` | The port. Change it only if it is taken (then also in the firewall rule from option C). |
 | `volume_step = 1` | How much one tap changes the volume: 1 = 2%, 2 = 4%… up to 10. |
 | `forget_phones_after_days = 30` | A phone not used for this many days is disconnected automatically. `0` = never. |
+| `tailscale_auto_connect = yes` | Devices signed in to your Tailscale account open the secure link with no code (section 8). `no` = they need a code too. |
 
 The connected phones are stored in `devices.json` in the project folder. It holds only a fingerprint of each
 phone's key, not the key itself. Deleting the file disconnects all phones.
@@ -362,11 +377,12 @@ on the laptop — the remote never runs hidden.
 
 ## 14. Update to a new version
 
-1. Stop the remote (double-click `stop.bat`).
-2. Download the new ZIP (section 2, option A) and extract it.
-3. Copy **`config.ini`** and **`devices.json`** from your old folder into the new one (replace). This keeps your apps,
-   settings and connected phones.
-4. Start the remote from the new folder.
+**Double-click `update.bat`.** It stops the remote if it runs, downloads the newest version from GitHub and replaces the
+program files. Your `config.ini` (apps and settings) and `devices.json` (connected phones) are kept. Then start the remote
+again with `start.bat`.
+
+(If you have a very old copy without `update.bat`, download the ZIP again as in section 2 and copy your `config.ini`
+into the new folder.)
 
 ## 15. Troubleshooting
 
@@ -422,14 +438,25 @@ normal programs control it. Then also start `start.bat` with right-click → **R
 
 ## 16. Security
 
-- **No PIN to guess.** A phone connects with a code (or link) that works **once**, for **15 minutes**. Then the phone gets
-  its own long secret key. The laptop stores only a fingerprint of it.
+**Why the browser says "Not Secure" / "not encrypted":** addresses that start with `http://` (like `http://192.168.1.23:8765`)
+are not encrypted by the browser.
+- **At home on Wi-Fi** this means: someone else connected to the **same Wi-Fi** could, with special tools, see the screen
+  pictures and what you type, and even copy the phone's key and then control the laptop. With a strong Wi-Fi password at
+  home the risk is small. On a public Wi-Fi it would be real — that's why the remote works only on private networks.
+- **With Tailscale** (`http://100.…`) the connection **is** encrypted by Tailscale; the browser just doesn't know it, so it
+  still shows the warning.
+- **With the secure link** (`https://….ts.net`, section 8) it is encrypted twice (Tailscale + https with a real
+  certificate), the browser shows the padlock and no warning. This is the best way.
+
+**What else protects you:**
+- **No PIN to guess.** A phone connects with a code (or link) that works **once**, for **15 minutes**; then it gets its own
+  long secret key, and the laptop stores only a fingerprint of it. With the secure link, Tailscale itself checks that the
+  device is yours.
 - **You can take access away at any time:** disconnect one phone or all phones (phone Settings, or **D** in the window).
-  Phones not used for 30 days are disconnected automatically.
-- **The remote is always visible on the laptop.** Its window shows every action. While a phone watches the screen,
-  the window says `SCREEN VIEW started on …` and its title changes to **"SCREEN IS BEING VIEWED"**.
-- Only devices on your home network (or your own Tailscale network) can reach it. 5 failed attempts block a device for 5 minutes.
+  Phones not used for 30 days are disconnected automatically. If you lose your phone: type **D** in the window, and also
+  remove the phone from Tailscale (<https://login.tailscale.com/admin/machines>).
+- **The remote is always visible on the laptop.** Its window shows every action. While a phone watches the screen, the
+  window says `SCREEN VIEW started on …` and its title changes to **"SCREEN IS BEING VIEWED"**.
+- Only devices on your home network or your own Tailscale network can reach it. 5 wrong codes block a device for 5 minutes.
 - The phone can open only the apps on your list.
-- On the home Wi-Fi the connection is plain `http` (not encrypted). That is fine on a home network you trust; don't use the
-  remote on public networks. Over Tailscale the connection is encrypted.
-- Use the remote only on your own computers.
+- Don't open a port on your router for it, and use the remote only on your own computers.

@@ -449,6 +449,7 @@
   let key = store.get("key");
   let phoneId = "";
   let currentTab = "remote";
+  let connected = false;  // with our own key, or let in by Tailscale
 
   // ---------- short messages ----------
   let toastTimer;
@@ -488,7 +489,8 @@
     const res = await send(path, options, timeoutMs);
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      disconnected("This phone is not connected to this laptop any more. Get a new code on the laptop (type L + Enter in its window).");
+      if (key) disconnected("This phone is not connected to this laptop any more. Get a new code on the laptop (type L + Enter in its window).");
+      else showWelcome();  // not connected yet
       throw new Error(data.error || "This phone is not connected.");
     }
     if (!res.ok) throw new Error(data.error || "Error " + res.status);
@@ -517,6 +519,7 @@
   }
 
   function showWelcome(message = "") {
+    connected = false;
     stopEverything();
     $("app").hidden = true;
     $("nav").hidden = true;
@@ -559,6 +562,7 @@
       $("laptopName").textContent = r.laptop;
       $("laptopInfo").textContent = "Laptop Remote · " + r.phone + (r.test_mode ? " · test mode" : "");
       document.title = r.laptop + " – Remote";
+      connected = true;
       $("welcome").hidden = true;
       $("app").hidden = false;
       $("nav").hidden = false;
@@ -566,11 +570,11 @@
       showTab(store.get("tab", "remote"));
       loadPrograms();
     } catch (e) {
-      if (key) showWelcome(e.message);
+      if ($("welcome").hidden) showWelcome(key ? e.message : "");
     }
   }
 
-  $("retry").addEventListener("click", () => { if (key) start(); else location.reload(); });
+  $("retry").addEventListener("click", () => start());
   $("codeForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const code = $("codeInput").value.trim();
@@ -770,7 +774,7 @@
   }
 
   function screenWanted() {
-    return currentTab === "screen" && !live.paused && document.visibilityState === "visible" && !!key && !$("app").hidden;
+    return currentTab === "screen" && !live.paused && document.visibilityState === "visible" && connected && !$("app").hidden;
   }
 
   function startScreen() {
@@ -983,7 +987,7 @@
     if (!holding) return;
     holding = false;
     showHolding();
-    if (key) command({ command: "mouse_button", button: "left", pressed: false }, true);
+    if (connected) command({ command: "mouse_button", button: "left", pressed: false }, true);
   }
 
   // ---------- settings ----------
@@ -1004,7 +1008,7 @@
         const left = document.createElement("div");
         left.textContent = p.name;
         const small = document.createElement("small");
-        small.textContent = " · used " + ago(p.last_used);
+        small.textContent = p.last_used ? " · used " + ago(p.last_used) : " · let in with no code";
         left.appendChild(small);
         li.appendChild(left);
         if (p.id === phoneId) {
@@ -1015,8 +1019,10 @@
         }
         list.appendChild(li);
       }
-      $("forgetInfo").textContent = r.forget_days
-        ? `A phone that is not used for ${r.forget_days} days is disconnected automatically.` : "";
+      $("forgetInfo").textContent = (phoneId === "tailscale"
+        ? "This phone is let in by your Tailscale account (signed in to the same account as the laptop). "
+        : "") + (r.forget_days ? `A phone that is not used for ${r.forget_days} days is disconnected automatically.` : "");
+      $("forgetMe").hidden = phoneId === "tailscale";
     } catch (e) {
       list.replaceChildren();
       toast(e.message, true);
@@ -1065,9 +1071,9 @@
   }
   // The link can also be opened in a tab where this page is already open.
   window.addEventListener("hashchange", openedWithLink);
-  if (!openedWithLink()) {
-    if (key) start(); else showWelcome();
-  }
+  // Without a key the laptop may still let this phone in: through the secure Tailscale
+  // link, a device of the same Tailscale account needs no code.
+  if (!openedWithLink()) start();
 })();
 </script>
 </body>

@@ -9,6 +9,7 @@ Uses only the Python standard library.
 
 import hashlib
 import hmac
+import io
 import ipaddress
 import json
 import locale
@@ -22,6 +23,7 @@ import sys
 import threading
 import time
 import urllib.request
+import zipfile
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -156,6 +158,7 @@ def _load_config():
         "port": _number(srv, "port", DEFAULT_PORT, 1, 65535, warnings),
         "volume_step": _number(srv, "volume_step", 1, 1, 10, warnings),
         "forget_days": _number(srv, "forget_phones_after_days", 30, 0, 3650, warnings),
+        "tailscale_auto": srv.get("tailscale_auto_connect", "yes").strip().lower() not in ("no", "0", "false", "off"),
         "programs": programs,
         "warnings": warnings,
     }
@@ -340,18 +343,83 @@ def laptop_addresses():
     return addresses or ["127.0.0.1"]
 
 
-def _tailscale_address():
-    """If Tailscale is installed and on, ask it for this laptop's Tailscale address."""
-    for program in ("tailscale", r"C:\Program Files\Tailscale\tailscale.exe"):
+TAILSCALE_PROGRAMS = ("tailscale", r"C:\Program Files\Tailscale\tailscale.exe")
+
+
+def _run_tailscale(*arguments, timeout=5):
+    """Run the Tailscale command line program, if Tailscale is installed. Return the result or None."""
+    for program in TAILSCALE_PROGRAMS:
         try:
-            output = subprocess.run([program, "ip", "-4"], capture_output=True, text=True, timeout=3,
-                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+            return subprocess.run([program, *arguments], capture_output=True, text=True, timeout=timeout,
+                                  errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except (OSError, subprocess.SubprocessError):
             continue
-        for word in output.split():
-            if is_tailscale(word):
-                return word
     return None
+
+
+def _tailscale_address():
+    """If Tailscale is installed and on, ask it for this laptop's Tailscale address."""
+    result = _run_tailscale("ip", "-4", timeout=3)
+    for word in (result.stdout.split() if result else []):
+        if is_tailscale(word):
+            return word
+    return None
+
+
+# Tailscale: this laptop's name in Tailscale (e.g. my-laptop.tail1234.ts.net), the
+# login of its owner, and whether Tailscale can give it a real https certificate.
+TAILSCALE = {"name": None, "login": None, "https": False}
+
+
+def detect_tailscale():
+    fake = os.environ.get("LAPTOP_REMOTE_TEST_TAILSCALE") if actions.TEST_MODE else None
+    if fake:  # only for tests on other systems: "name|login|https"
+        name, login, https = (fake.split("|") + ["", "", ""])[:3]
+        TAILSCALE.update(name=name.lower() or None, login=login.lower() or None, https=https == "1")
+        return
+    result = _run_tailscale("status", "--json")
+    if not result or result.returncode != 0:
+        return
+    try:
+        status = json.loads(result.stdout)
+        me = status.get("Self") or {}
+        name = (me.get("DNSName") or "").rstrip(".").lower()
+        user = (status.get("User") or {}).get(str(me.get("UserID")), {}) or {}
+        login = (user.get("LoginName") or "").lower()
+        domains = [d.rstrip(".").lower() for d in (status.get("CertDomains") or [])]
+    except (ValueError, AttributeError, TypeError):
+        return
+    if name:
+        TAILSCALE.update(name=name, login=login or None, https=name in domains)
+
+
+def secure_link():
+    """https://my-laptop.tail1234.ts.net when Tailscale can give the laptop a secure link, else None."""
+    return f"https://{TAILSCALE['name']}" if TAILSCALE["name"] and TAILSCALE["https"] else None
+
+
+def turn_on_tailscale_https(port):
+    """Used by tailscale-https.bat: let Tailscale serve this remote at a secure https link."""
+    print("\n  Turning on the secure link (https) through Tailscale...\n", flush=True)
+    for program in TAILSCALE_PROGRAMS:
+        try:
+            result = subprocess.run([program, "serve", "--bg", str(port)])  # shows its own messages
+            break
+        except OSError:
+            continue
+    else:
+        print("  Tailscale is not installed on this laptop. See README, section 8.")
+        return 1
+    detect_tailscale()
+    if result.returncode == 0 and TAILSCALE["name"]:
+        print(f"\n  Done. The secure link is:   https://{TAILSCALE['name']}")
+        print("  Open it on your phone (with Tailscale switched on in the phone). No code is needed.")
+        print("  It keeps working after a restart; just start the remote (start.bat) as usual.")
+        return 0
+    print("\n  It did not work yet. If Tailscale showed a link above, open it, allow HTTPS (Enable),")
+    print("  and then double-click tailscale-https.bat again. If it says \"Access denied\",")
+    print("  right-click tailscale-https.bat and choose Run as administrator.")
+    return 1
 
 
 def phone_addresses(port):
@@ -364,13 +432,18 @@ def phone_addresses(port):
 
 def print_addresses(port, indent="      "):
     home, anywhere = phone_addresses(port)
+    secure = secure_link()
+    if secure:
+        print(f"{indent}{secure:<32}  BEST: from anywhere, encrypted, no code (Tailscale)")
     print(f"{indent}{home[0]:<32}  at home (the same Wi-Fi as the laptop)")
     for address in anywhere:
         print(f"{indent}{address:<32}  from anywhere, also on 5G (Tailscale)")
     for address in home[1:]:
         print(f"{indent}{address:<32}  (another address, if the first one does not work)")
-    if not anywhere:
+    if not anywhere and not TAILSCALE["name"]:
         print(f"{indent}Away from home (5G)? Install Tailscale on the laptop and the phone (README, section 8).")
+    elif not secure:
+        print(f"{indent}For a secure https link with no code: double-click tailscale-https.bat once (README, section 8).")
 
 
 def is_tailscale(ip):
@@ -549,6 +622,10 @@ def run_command(data, device, server):
         actions.scroll(_integer(data.get("amount", 0), -2400, 2400), data.get("horizontal") is True)
         return "Scrolled"
 
+    if command == "forget_me" and device["id"] == "tailscale":
+        raise ValueError("This phone is let in by your Tailscale account. To stop that, sign it out of "
+                         "Tailscale, or set tailscale_auto_connect = no in config.ini.")
+
     if command == "forget_me":
         forget_device(device["id"])
         return "This phone is disconnected"
@@ -635,18 +712,40 @@ class Handler(BaseHTTPRequestHandler):
                 _failures[ip] = (count, 0)
                 self._log(what)
 
+    def _tailscale_device(self):
+        """
+        A device signed in to the same Tailscale account as this laptop, coming through
+        the secure https link. Tailscale itself has checked who it is, so no code is needed.
+        (`tailscale serve` connects from this laptop itself and adds the Tailscale-User-Login
+        header; the Host check makes sure the request really came through that link.)
+        """
+        if not (TAILSCALE["name"] and TAILSCALE["login"] and config()["tailscale_auto"]):
+            return None
+        if self.client_address[0] != "127.0.0.1":
+            return None
+        host = (self.headers.get("Host") or "").split(":")[0].lower()
+        login = (self.headers.get("Tailscale-User-Login") or "").strip().lower()
+        if host != TAILSCALE["name"] or login != TAILSCALE["login"]:
+            return None
+        return {"id": "tailscale", "name": f"Tailscale ({login})", "via": host}
+
     def _device(self):
         """The connected phone making this request, or None (and an error reply)."""
+        device = self._tailscale_device()
+        if device:
+            return device
         wait = self._blocked()
         if wait:
             self._reply(429, {"error": f"Too many failed attempts. Wait {wait} s and try again."})
             return None
-        device = find_device(self.headers.get("X-Key", ""))
+        given = self.headers.get("X-Key", "")
+        device = find_device(given)
         if device:
             with _failures_lock:
                 _failures.pop(self.client_address[0], None)
             return device
-        self._failed("unknown phone (not connected, or disconnected)")
+        if given:  # a page opened without any key is not an attempt to guess one
+            self._failed("unknown phone (not connected, or disconnected)")
         self._reply(401, {"error": "This phone is not connected to this laptop."})
         return None
 
@@ -680,7 +779,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/phones":
             if self._device():
-                self._reply(200, {"phones": device_list(), "forget_days": config()["forget_days"]})
+                phones = device_list()
+                if TAILSCALE["login"] and config()["tailscale_auto"]:
+                    phones.insert(0, {"id": "tailscale", "name": f"Your Tailscale devices ({TAILSCALE['login']})",
+                                      "via": secure_link() or "", "connected": None, "last_used": None})
+                self._reply(200, {"phones": phones, "forget_days": config()["forget_days"]})
             return
 
         if path == "/api/screen":
@@ -843,7 +946,12 @@ def print_link(port):
     code = new_link_code()
     home, anywhere = phone_addresses(port)
     link = f"{(anywhere or home)[0]}/?code={code}"
-    copied = actions.copy_to_clipboard(link)
+    secure = secure_link()
+    copied = actions.copy_to_clipboard(secure or link)
+    if secure and TAILSCALE["login"] and config()["tailscale_auto"]:
+        print(f"\n  YOUR TAILSCALE DEVICES ({TAILSCALE['login']}) NEED NO CODE. Just open on the phone:")
+        print(f"      {secure}" + ("   (already copied, e.g. to e-mail it)" if copied else ""))
+        copied = False
     print(f"\n  CONNECT A PHONE (the code works once, for {LINK_MINUTES} minutes):\n")
     print("    1. On the phone, open:")
     print_addresses(port, indent="         ")
@@ -916,6 +1024,44 @@ def stop_running_copy(port):
     return 0
 
 
+UPDATE_URL = "https://github.com/bogdandata/laptop-remote/archive/refs/heads/main.zip"
+KEEP_WHEN_UPDATING = {"config.ini", "devices.json", "update.bat"}  # your settings, your phones
+
+
+def update_from_github(port):
+    """Used by update.bat: download the newest version and replace the program files."""
+    url = (os.environ.get("LAPTOP_REMOTE_TEST_UPDATE_URL") if actions.TEST_MODE else None) or UPDATE_URL
+    print("\n  Updating Laptop Remote. Your config.ini and your connected phones are kept.\n")
+    if already_running(port):
+        print("  1) Stopping the remote...")
+        stop_running_copy(port)
+    print("  2) Downloading the newest version from GitHub...")
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            archive = zipfile.ZipFile(io.BytesIO(response.read()))
+    except Exception as e:
+        print(f"\n  The download did not work ({e}).")
+        print("  Check the internet connection and try again.")
+        return 1
+    base = BASE_DIR.resolve()
+    updated = 0
+    for name in archive.namelist():
+        folder, _, relative = name.partition("/")  # inside the ZIP everything is in laptop-remote-main/
+        if not relative or name.endswith("/") or relative in KEEP_WHEN_UPDATING:
+            continue
+        target = (base / relative).resolve()
+        if base not in target.parents:
+            continue  # never write outside the program folder
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(archive.read(name))
+        updated += 1
+    if not updated:
+        print("\n  The download did not contain the program. Nothing was changed.")
+        return 1
+    print(f"  3) Done: {updated} files updated. Start the remote with start.bat.")
+    return 0
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -926,6 +1072,10 @@ def main():
     port = data["port"]
     if "--stop" in sys.argv[1:]:
         return stop_running_copy(port)
+    if "--tailscale-https" in sys.argv[1:]:
+        return turn_on_tailscale_https(port)
+    if "--update" in sys.argv[1:]:
+        return update_from_github(port)
 
     actions.make_dpi_aware()
     actions.disable_quickedit()
@@ -942,6 +1092,7 @@ def main():
         return 1
 
     load_devices()
+    detect_tailscale()
     forgotten = forget_unused_devices(data["forget_days"])
     phones = device_list()
 
@@ -950,11 +1101,15 @@ def main():
     print(LINE)
     for name in forgotten:
         print(f"  Disconnected (not used for {data['forget_days']} days): {name}")
-    if phones:
-        print(f"  Connected phones: {', '.join(p['name'] for p in phones)}")
-        print("  They can simply open:")
+    tailscale_phones = bool(secure_link() and TAILSCALE["login"] and data["tailscale_auto"])
+    if phones or tailscale_phones:
+        if phones:
+            print(f"  Connected phones: {', '.join(p['name'] for p in phones)}")
+        if tailscale_phones:
+            print(f"  Your Tailscale devices ({TAILSCALE['login']}) are let in with no code.")
+        print("  Open on the phone:")
         print_addresses(port)
-        print("  New phone? Type L and press Enter for a code.")
+        print("  New phone without Tailscale? Type L and press Enter for a code.")
     else:
         print("  No phone is connected to this laptop yet.")
         print_link(port)
