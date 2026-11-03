@@ -142,6 +142,12 @@
   #welcome li { margin-bottom: 8px; }
   #welcome b { color: var(--text); }
   #welcomeMessage { color: var(--orange); margin: 0 0 14px; min-height: 1em; }
+  #codeInput {
+    width: 100%; font: inherit; font-size: 28px; letter-spacing: .12em; text-align: center; text-transform: uppercase;
+    color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+  }
+  #codeInput:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  #codeForm button { margin-top: 10px; }
   #welcomeMessage:empty { display: none; }
 
   /* Bottom navigation */
@@ -198,12 +204,17 @@
   <p id="welcomeMessage"></p>
   <ol>
     <li>On the laptop, start <b>Laptop Remote</b> (double-click <b>start.bat</b>).</li>
-    <li>In its window, type <b>L</b> and press <b>Enter</b>. A link appears and is copied.</li>
-    <li>Send the link to yourself (e-mail, Viber, WhatsApp…) and open it on this phone.</li>
+    <li>Its window shows a <b>code</b> like <b>K7PQ-4XMZ</b>. No code there? Type <b>L</b> in the window and press <b>Enter</b>.</li>
+    <li>Type the code here and tap <b>Connect</b>:</li>
   </ol>
-  <p class="hint">A link works only once and only for 15 minutes. After that this phone stays connected, with no PIN.</p>
-  <p class="hint">Open the link in the browser you will use for the remote (on iPhone: Safari). Private mode, or a browser
-    that deletes its data (like the DuckDuckGo flame button), forgets the connection, and you would need a new link.</p>
+  <form id="codeForm" autocomplete="off">
+    <input id="codeInput" type="text" autocapitalize="characters" autocomplete="off" autocorrect="off"
+           spellcheck="false" maxlength="12" placeholder="ABCD-EFGH" aria-label="Code from the laptop">
+    <button type="submit" class="primary wide">Connect</button>
+  </form>
+  <p class="hint">You type the code only once (it works once, for 15 minutes). After that this phone stays connected — no PIN, no code.</p>
+  <p class="hint">On iPhone, a page added to the home screen has its own memory: open the icon and type the code there.
+    Private mode, or a browser that deletes its data (like the DuckDuckGo flame button), forgets the connection.</p>
   <button class="wide" id="retry">Try again</button>
 </div>
 
@@ -348,8 +359,8 @@
     </section>
     <section>
       <h2>Tips</h2>
-      <p><b>Like an app:</b> add this page to your home screen (Chrome: menu ⋮ → Add to Home screen; Safari: share □↑ → Add to Home Screen).</p>
-      <p><b>Another laptop:</b> start Laptop Remote on it and open its link on this phone. Each laptop gets its own page and icon.</p>
+      <p><b>Like an app:</b> add this page to your home screen (Chrome: menu ⋮ → Add to Home screen; Safari: share □↑ → Add to Home Screen). On iPhone the icon has its own memory: open it once and type a new code from the laptop there.</p>
+      <p><b>Another laptop:</b> start Laptop Remote on it and type its code on this phone. Each laptop gets its own page and icon.</p>
       <p><b>Away from home:</b> use the phone's hotspot, or Tailscale (see the README).</p>
     </section>
   </div>
@@ -466,7 +477,7 @@
     const res = await send(path, options, timeoutMs);
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      disconnected("This phone is not connected to this laptop any more. Get a new link on the laptop.");
+      disconnected("This phone is not connected to this laptop any more. Get a new code on the laptop (type L + Enter in its window).");
       throw new Error(data.error || "This phone is not connected.");
     }
     if (!res.ok) throw new Error(data.error || "Error " + res.status);
@@ -527,7 +538,7 @@
     key = data.key;
     store.set("key", key);
     await start();
-    toast("Connected to " + data.laptop + ". Tip: add this page to your home screen.");
+    toast("Connected to " + data.laptop);
   }
 
   async function start() {
@@ -549,6 +560,13 @@
   }
 
   $("retry").addEventListener("click", () => { if (key) start(); else location.reload(); });
+  $("codeForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const code = $("codeInput").value.trim();
+    if (!code) { $("codeInput").focus(); return; }
+    $("codeInput").blur();
+    connectWithCode(code);
+  });
 
   // ---------- tabs ----------
   const keyboardSlots = { screen: "slot-screen", mouse: "slot-mouse", keyboard: "slot-keyboard" };
@@ -762,7 +780,7 @@
         await wait(1500);
         continue;
       }
-      if (res.status === 401) { disconnected("This phone is not connected to this laptop any more. Get a new link on the laptop."); return; }
+      if (res.status === 401) { disconnected("This phone is not connected to this laptop any more. Get a new code on the laptop (type L + Enter in its window)."); return; }
       if (res.status !== 200 && res.status !== 204) {
         const data = await res.json().catch(() => ({}));
         $("screenBox").hidden = true;
@@ -985,12 +1003,12 @@
     }
   }
   $("forgetMe").addEventListener("click", async () => {
-    if (!(await ask("Disconnect this phone?", "To use it again, you will need a new link from the laptop.", "Yes, disconnect"))) return;
-    if (await command({ command: "forget_me" }, true)) disconnected("This phone is disconnected. To connect it again, get a new link on the laptop.");
+    if (!(await ask("Disconnect this phone?", "To use it again, you will need a new code from the laptop.", "Yes, disconnect"))) return;
+    if (await command({ command: "forget_me" }, true)) disconnected("This phone is disconnected. To connect it again, get a new code on the laptop.");
   });
   $("forgetAll").addEventListener("click", async () => {
-    if (!(await ask("Disconnect all phones?", "All phones lose access, this one too. To use the remote again, you will need a new link from the laptop.", "Yes, disconnect all"))) return;
-    if (await command({ command: "forget_all", confirmed: true }, true)) disconnected("All phones are disconnected. To connect again, get a new link on the laptop.");
+    if (!(await ask("Disconnect all phones?", "All phones lose access, this one too. To use the remote again, you will need a new code from the laptop.", "Yes, disconnect all"))) return;
+    if (await command({ command: "forget_all", confirmed: true }, true)) disconnected("All phones are disconnected. To connect again, get a new code on the laptop.");
   });
   $("stopRemote").addEventListener("click", async () => {
     if (!(await ask("Stop the remote?", "Laptop Remote stops on the laptop. To use it again, start it on the laptop (start.bat).", "Yes, stop it"))) return;
@@ -1013,12 +1031,16 @@
   });
 
   // ---------- start ----------
-  // A link from the laptop looks like  http://192.168.x.x:8765/#connect=CODE
+  // A link from the laptop looks like  http://192.168.x.x:8765/?code=K7PQ-4XMZ
+  // (links from the first version 2 looked like .../#connect=CODE)
   function openedWithLink() {
-    const link = location.hash.match(/connect=([\w-]+)/);
-    if (!link) return false;
-    history.replaceState(null, "", location.pathname + location.search);  // hide the code
-    connectWithCode(link[1]);
+    const fromLink = new URLSearchParams(location.search).get("code");
+    const oldLink = (location.hash.match(/connect=([\w-]+)/) || [])[1];
+    const code = fromLink || oldLink;
+    if (!code) return false;
+    history.replaceState(null, "", location.pathname);  // hide the code
+    $("codeInput").value = code;
+    connectWithCode(code);
     return true;
   }
   // The link can also be opened in a tab where this page is already open.
