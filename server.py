@@ -333,7 +333,44 @@ def laptop_addresses():
                 addresses.append(a)
     except OSError:
         pass
+    if not any(is_tailscale(a) for a in addresses):
+        tailscale = _tailscale_address()
+        if tailscale:
+            addresses.append(tailscale)
     return addresses or ["127.0.0.1"]
+
+
+def _tailscale_address():
+    """If Tailscale is installed and on, ask it for this laptop's Tailscale address."""
+    for program in ("tailscale", r"C:\Program Files\Tailscale\tailscale.exe"):
+        try:
+            output = subprocess.run([program, "ip", "-4"], capture_output=True, text=True, timeout=3,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        for word in output.split():
+            if is_tailscale(word):
+                return word
+    return None
+
+
+def phone_addresses(port):
+    """(addresses at home, addresses from anywhere with Tailscale) as http://... texts."""
+    addresses = laptop_addresses()
+    home = [f"http://{a}:{port}" for a in addresses if not is_tailscale(a)]
+    anywhere = [f"http://{a}:{port}" for a in addresses if is_tailscale(a)]
+    return home or [f"http://127.0.0.1:{port}"], anywhere
+
+
+def print_addresses(port, indent="      "):
+    home, anywhere = phone_addresses(port)
+    print(f"{indent}{home[0]:<32}  at home (the same Wi-Fi as the laptop)")
+    for address in anywhere:
+        print(f"{indent}{address:<32}  from anywhere, also on 5G (Tailscale)")
+    for address in home[1:]:
+        print(f"{indent}{address:<32}  (another address, if the first one does not work)")
+    if not anywhere:
+        print(f"{indent}Away from home (5G)? Install Tailscale on the laptop and the phone (README, section 8).")
 
 
 def is_tailscale(ip):
@@ -804,18 +841,15 @@ LINE = "=" * 66
 def print_link(port):
     """Create a new one-time code for a phone, print it with its link and copy the link."""
     code = new_link_code()
-    addresses = laptop_addresses()
-    links = [f"http://{a}:{port}/?code={code}" for a in addresses]
-    copied = actions.copy_to_clipboard(links[0])
+    home, anywhere = phone_addresses(port)
+    link = f"{(anywhere or home)[0]}/?code={code}"
+    copied = actions.copy_to_clipboard(link)
     print(f"\n  CONNECT A PHONE (the code works once, for {LINK_MINUTES} minutes):\n")
-    print(f"      1. On the phone, open:   http://{addresses[0]}:{port}")
-    print(f"      2. Type this code:       {code}\n")
+    print("    1. On the phone, open:")
+    print_addresses(port, indent="         ")
+    print(f"\n    2. Type this code:   {code}\n")
     print("  Or open this link on the phone" + (" (it is already copied, e.g. to e-mail it):" if copied else ":"))
-    print(f"      {links[0]}")
-    if len(links) > 1:
-        print("\n  If the address does not work on the phone, try:")
-        for a in addresses[1:]:
-            print(f"      http://{a}:{port}" + ("   (Tailscale)" if is_tailscale(a) else ""))
+    print(f"      {link}")
     print(flush=True)
 
 
@@ -910,7 +944,6 @@ def main():
     load_devices()
     forgotten = forget_unused_devices(data["forget_days"])
     phones = device_list()
-    addresses = laptop_addresses()
 
     print(LINE)
     print(f"  LAPTOP REMOTE — running on “{data['name']}”")
@@ -919,7 +952,9 @@ def main():
         print(f"  Disconnected (not used for {data['forget_days']} days): {name}")
     if phones:
         print(f"  Connected phones: {', '.join(p['name'] for p in phones)}")
-        print(f"  They can simply open:  http://{addresses[0]}:{port}")
+        print("  They can simply open:")
+        print_addresses(port)
+        print("  New phone? Type L and press Enter for a code.")
     else:
         print("  No phone is connected to this laptop yet.")
         print_link(port)

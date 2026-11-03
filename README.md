@@ -112,8 +112,11 @@ A black window opens. The first time it looks roughly like this:
 
   CONNECT A PHONE (the code works once, for 15 minutes):
 
-      1. On the phone, open:   http://192.168.1.23:8765
-      2. Type this code:       K7PQ-4XMZ
+    1. On the phone, open:
+         http://192.168.1.23:8765          at home (the same Wi-Fi as the laptop)
+         Away from home (5G)? Install Tailscale on the laptop and the phone (README, section 8).
+
+    2. Type this code:   K7PQ-4XMZ
 
   Or open this link on the phone (it is already copied, e.g. to e-mail it):
       http://192.168.1.23:8765/?code=K7PQ-4XMZ
@@ -233,17 +236,26 @@ each laptop you want to control.
 
 The laptop then uses the phone's mobile data for its own internet. On Android, USB tethering (cable) works the same way.
 
-**From anywhere over the internet — Tailscale** (a free extra program, installed by you):
+**From anywhere over the internet (5G, another Wi-Fi) — Tailscale** (a free extra program, installed by you):
 
-Tailscale makes a private, encrypted network between your own devices, so the phone can reach the laptop
-even on mobile data, from anywhere.
-1. Install Tailscale on the laptop (<https://tailscale.com/download>) and on the phone (App Store / Google Play),
-   and sign in with the **same account** on both.
-2. Start the remote and, in its window, type **L** + **Enter** for a new code. Below it the window also lists an
-   address that starts with `100.`, marked **(Tailscale)**. Open that address on the phone and type the code. It becomes
-   another page (and icon), which works from anywhere.
-3. If that address doesn't open, Windows may count the Tailscale network as public. Allow the remote on it as in
-   section 10 (or make it private, section 11 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
+When the phone is on 5G, your home router lets nobody in from outside, so something has to connect the phone and the
+laptop. Tailscale does that: it makes a private, encrypted network of your own devices, without changing anything on
+the router. It is free for personal use.
+
+1. **On the laptop:** open <https://tailscale.com/download>, download Tailscale for Windows, install it and sign in
+   (with a Google, Microsoft or Apple account).
+2. **On the phone:** install **Tailscale** from the App Store / Google Play, open it, sign in with the **same account**,
+   and allow it to add a VPN configuration. Leave it switched on (it runs in the background).
+3. **Start the remote again** on the laptop. Its window now shows a second address, which starts with `100.` and says
+   **from anywhere, also on 5G (Tailscale)**. A code is shown too (if not, type **L** + **Enter**).
+4. **On the phone, open that `100.…` address** and type the code. Add it to the home screen (on iPhone: add the icon
+   first, open it, and type the code there).
+
+Tip: use the `100.…` address always, also at home — it works on Wi-Fi and on 5G, so you need only one icon.
+The laptop has to be switched on, connected to the internet, and the remote has to run on it.
+
+If the `100.…` address doesn't open, Windows may count the Tailscale network as public. Allow the remote on it as in
+section 10, or make it private (section 11 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
 
 Don't open a port on your router to reach the remote from the internet: then anyone could try to reach it.
 Use Tailscale instead.
