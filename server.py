@@ -227,20 +227,29 @@ def _save_devices():
         log(f"WARNING: cannot save devices.json ({e})")
 
 
+CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I, O, 0, 1: easy to read and type
+
+
+def normalize_code(text):
+    """Turn what the user typed (or the link) into the stored form: capitals, no dashes or spaces."""
+    return "".join(ch for ch in str(text).upper() if ch.isalnum())
+
+
 def new_link_code():
-    code = secrets.token_urlsafe(18)
+    """A new one-time code for connecting a phone, e.g. "K7PQ-4XMZ" (works once, for 15 minutes)."""
+    code = "".join(secrets.choice(CODE_LETTERS) for _ in range(8))
     now = time.time()
     with _devices_lock:
         for old in [c for c, until in _link_codes.items() if until < now]:
             del _link_codes[old]
         _link_codes[code] = now + LINK_MINUTES * 60
-    return code
+    return f"{code[:4]}-{code[4:]}"
 
 
 def connect_device(code, name, via):
-    """Use a link code. Return (key, device) or None if the link is not valid."""
+    """Use a code (typed, or from a link). Return (key, device) or None if it is not valid."""
     with _devices_lock:
-        until = _link_codes.pop(code, None)  # a link works only once
+        until = _link_codes.pop(normalize_code(code), None)  # a code works only once
         if not until or until < time.time():
             return None
         key = secrets.token_urlsafe(32)
@@ -775,9 +784,9 @@ class Handler(BaseHTTPRequestHandler):
         if wait:
             self._reply(429, {"error": f"Too many failed attempts. Wait {wait} s and try again."})
             return
-        self._failed("a phone used a link that is not valid")
-        self._reply(400, {"error": "This link has expired or was already used. "
-                                   "On the laptop, type L and press Enter for a new link."})
+        self._failed("a phone used a code that is not valid")
+        self._reply(400, {"error": "This code is wrong, has expired or was already used. "
+                                   "On the laptop, type L and press Enter for a new code."})
 
     def _unexpected_error(self, e):
         self._log(f"UNEXPECTED ERROR: {type(e).__name__}: {e}")
@@ -793,29 +802,26 @@ LINE = "=" * 66
 
 
 def print_link(port):
-    """Create a new one-time link for a phone, print it and put it on the clipboard."""
+    """Create a new one-time code for a phone, print it with its link and copy the link."""
     code = new_link_code()
     addresses = laptop_addresses()
-    links = [f"http://{a}:{port}/#connect={code}" for a in addresses]
+    links = [f"http://{a}:{port}/?code={code}" for a in addresses]
     copied = actions.copy_to_clipboard(links[0])
-    print(f"\n  To connect a phone, open this link on it (it works once, for {LINK_MINUTES} minutes):\n")
-    print(f"      {links[0]}\n")
+    print(f"\n  CONNECT A PHONE (the code works once, for {LINK_MINUTES} minutes):\n")
+    print(f"      1. On the phone, open:   http://{addresses[0]}:{port}")
+    print(f"      2. Type this code:       {code}\n")
+    print("  Or open this link on the phone" + (" (it is already copied, e.g. to e-mail it):" if copied else ":"))
+    print(f"      {links[0]}")
     if len(links) > 1:
-        print("  If that address does not work on the phone, use one of these:")
-        for a, link in zip(addresses[1:], links[1:]):
-            print(f"      {link}" + ("   (Tailscale)" if is_tailscale(a) else ""))
-        print()
-    if copied:
-        print("  The link is already copied: paste it (Ctrl+V) into an e-mail or a message")
-        print("  to yourself, and open it on your phone.")
-    else:
-        print("  Send this link to yourself (e-mail, Viber, WhatsApp...) and open it on your phone.")
+        print("\n  If the address does not work on the phone, try:")
+        for a in addresses[1:]:
+            print(f"      http://{a}:{port}" + ("   (Tailscale)" if is_tailscale(a) else ""))
     print(flush=True)
 
 
 def print_commands():
     print("  Type a letter here and press Enter:")
-    print("      L   new link for a phone")
+    print("      L   new code for a phone")
     print("      D   disconnect all phones (their access stops working)")
     print("      Q   stop the remote")
     print(flush=True)
@@ -833,7 +839,7 @@ def _console_commands(server, port):
         elif command == "d":
             count = forget_all_devices()
             print(f"\n  Disconnected phones: {count}. Their access does not work any more.")
-            print("  To connect a phone again, type L and press Enter.\n", flush=True)
+            print("  To connect a phone again, type L and press Enter for a new code.\n", flush=True)
         elif command == "q":
             print("\n  Stopping...", flush=True)
             threading.Thread(target=server.shutdown, daemon=True).start()
