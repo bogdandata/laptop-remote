@@ -293,7 +293,8 @@ The app is the page `docs/index.html`, published from this project by GitHub Pag
 3. **On that laptop** (Windows 10 or 11), someone opens the link from the e-mail, clicks **Download the setup** and
    opens the downloaded file `LaptopRemote-setup.cmd`:
    - If the browser warns about the file: **Keep** (Edge: **…** → **Keep** → **Show more** → **Keep anyway**).
-   - If Windows shows **"Windows protected your PC"**: **More info** → **Run anyway**.
+   - If Windows shows **"Windows protected your PC"**: **More info** → **Run anyway**. (No **Run anyway**, or the file
+     is blocked? Right-click it → **Properties** → tick **Unblock** → **OK**, and open it again.)
    - A black window downloads everything (a minute or two), and the laptop asks
      **"Allow *your name* to control this laptop from anywhere?"** → **Yes**.
    - The black window can be minimized, but it should stay open.
