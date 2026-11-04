@@ -1,5 +1,11 @@
 __pycache__/
 *.pyc
-# connected phones (created on the laptop, never upload it)
+# created on the laptop, never upload them
 devices.json
 devices.tmp
+anywhere.json
+anywhere.tmp
+invite.txt
+cloudflared.exe
+cloudflared.part
+cloudflared.pid

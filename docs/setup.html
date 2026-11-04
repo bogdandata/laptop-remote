@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:,">
+<title>Laptop Remote – set up this laptop</title>
+<style>
+  :root {
+    --bg: #111418; --card: #1b2027; --button: #262d36; --text: #eef1f5; --muted: #9aa5b3;
+    --accent: #4f9cf9; --green: #3fb97a; --orange: #e49b3b; --border: #2f3742;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 18px; line-height: 1.45;
+    padding: max(18px, env(safe-area-inset-top)) 16px 40px; max-width: 640px; margin: 0 auto;
+  }
+  [hidden] { display: none !important; }
+  h1 { font-size: 26px; margin: 8px 0 6px; }
+  .lead { margin: 0 0 18px; }
+  .lead b { color: #fff; }
+  .note { background: #3a2a14; color: #ffd9a3; border-radius: 14px; padding: 12px 14px; margin: 0 0 16px; }
+  ol.steps { list-style: none; padding: 0; margin: 0 0 18px; counter-reset: step; }
+  ol.steps > li {
+    background: var(--card); border-radius: 18px; padding: 16px 16px 16px 62px; margin-bottom: 12px;
+    position: relative; counter-increment: step;
+  }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 16px; top: 15px; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps small { display: block; color: var(--muted); font-size: 15px; margin-top: 6px; }
+  button {
+    font: inherit; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 14px;
+    min-height: 58px; padding: 0 22px; cursor: pointer; width: 100%; margin-top: 4px;
+  }
+  button.plain { background: var(--button); border: 1px solid var(--border); color: var(--text); min-height: 50px; }
+  button:active { transform: scale(.98); }
+  #downloaded { color: var(--green); font-size: 15px; margin-top: 8px; }
+  details { background: var(--card); border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p, details li { color: var(--muted); font-size: 16px; }
+  details ul { padding-left: 20px; }
+  textarea {
+    width: 100%; min-height: 96px; font: inherit; font-size: 13px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px; word-break: break-all; margin: 6px 0;
+  }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 15px; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 22px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>Laptop Remote</h1>
+
+<div id="ok" hidden>
+  <p class="lead"><b class="who">Someone</b> invites this laptop to <b>Laptop Remote</b>, to help you from far away:
+    to see the screen and use the mouse and the keyboard. Everything is end-to-end encrypted.</p>
+  <p class="note" id="notWindows" hidden>Open this link on the <b>Windows laptop</b> that should be helped.
+    This device is not a Windows computer.</p>
+  <ol class="steps">
+    <li>
+      <button id="download">Download the setup</button>
+      <div id="downloaded" hidden>Downloaded: <b>LaptopRemote-setup.cmd</b></div>
+      <small>A small file made for this invitation only.</small>
+    </li>
+    <li><b>Open the downloaded file</b> — at the top or bottom of the browser, or in the <b>Downloads</b> folder.
+      <small>If the browser warns about the file, choose <b>Keep</b> (Edge: <b>…</b> → <b>Keep</b> → <b>Show more</b> → <b>Keep anyway</b>).
+        If Windows shows <b>“Windows protected your PC”</b>: click <b>More info</b>, then <b>Run anyway</b>.</small>
+    </li>
+    <li>A black window sets everything up (a minute or two). When the laptop asks
+      <b>“Allow <span class="who">…</span> to control this laptop from anywhere?”</b>, click <b>Yes</b>.
+      <small>Click Yes only if you know this person and you want their help.</small>
+    </li>
+    <li><b>Done.</b> You can minimize the black window, but do not close it. Leave the laptop on, with internet.
+      <small>Laptop Remote also starts by itself (minimized) every time you sign in to Windows.</small>
+    </li>
+  </ol>
+
+  <details>
+    <summary>Laptop Remote already runs on this laptop?</summary>
+    <p>Then you need no download: click its window, type <b>A</b>, press <b>Enter</b>, paste this invitation and press <b>Enter</b>.</p>
+    <textarea id="inviteText" readonly aria-label="The invitation"></textarea>
+    <button class="plain" id="copy">Copy the invitation</button>
+  </details>
+  <details>
+    <summary>What does the setup do?</summary>
+    <ul>
+      <li>Everything goes into one folder, <code>%LOCALAPPDATA%\LaptopRemote</code>. No administrator rights are needed, and nothing else on the laptop is changed.</li>
+      <li>It downloads, from the official places only: Laptop Remote (open source, <a href="https://github.com/bogdandata/laptop-remote">github.com/bogdandata/laptop-remote</a>), a private copy of Python (python.org), and Cloudflare's tunnel program cloudflared (github.com/cloudflare).</li>
+      <li>Only the device that made this invitation gets access, and only if you click Yes. Cloudflare and the message service in between see only encrypted data.</li>
+      <li>To end the help: close the Laptop Remote window (it starts again when you sign in next time). To remove it completely: <code>uninstall.bat</code> in <code>%LOCALAPPDATA%\LaptopRemote\app</code>.</li>
+    </ul>
+  </details>
+</div>
+
+<div id="bad" hidden>
+  <p class="note" id="badText"></p>
+</div>
+
+<footer>Laptop Remote — <a href="https://github.com/bogdandata/laptop-remote">open source on GitHub</a>.
+  This page sends nothing anywhere: the invitation stays in this browser until you download the setup.</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const ZIP_URL = "https://github.com/bogdandata/laptop-remote/archive/refs/heads/main.zip";
+  const PYTHON_VERSION = "3.12.10";
+  const INVITE_DAYS = 7;
+
+  function unb64(text) {
+    text = text.replace(/-/g, "+").replace(/_/g, "/");
+    while (text.length % 4) text += "=";
+    const raw = atob(text), out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function readInvite() {
+    const match = location.hash.match(/[#&]i=([A-Za-z0-9_-]+)/);
+    if (!match) return { error: "This page needs the whole invitation link from the e-mail or message. Open the link again, or copy all of it into the browser." };
+    try {
+      const data = JSON.parse(new TextDecoder().decode(unb64(match[1])));
+      if (data.v !== 1 || typeof data.pk !== "string" || typeof data.x !== "string") throw new Error("not an invitation");
+      if (data.t && Date.now() / 1000 - data.t > INVITE_DAYS * 86400) {
+        return { error: `This invitation is older than ${INVITE_DAYS} days. Ask ${data.n || "the person who sent it"} for a new one.` };
+      }
+      return { token: match[1], name: String(data.n || "Someone").slice(0, 40) };
+    } catch (e) {
+      return { error: "This invitation link is broken (maybe not all of it was copied). Ask for a new one." };
+    }
+  }
+
+  // Only letters that are safe inside a Windows .cmd file (the real name is shown by the laptop itself).
+  function plainName(name) {
+    const text = name.replace(/Đ/g, "Dj").replace(/đ/g, "dj").normalize("NFKD")
+      .replace(/[^A-Za-z0-9 ._'-]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
+    return text || "(a name in another alphabet)";
+  }
+
+  // The setup for Windows. Kept simple on purpose: everything it does is readable here.
+  function installer(token, name) {
+    const lines = [
+      "@echo off",
+      "setlocal",
+      "title Laptop Remote - setup",
+      "echo.",
+      "echo   LAPTOP REMOTE - setup",
+      "echo   =====================",
+      `echo   Invitation from: ${plainName(name)}`,
+      "echo   To help you from far away: to see the screen and use the mouse and keyboard.",
+      "echo   End-to-end encrypted. Nothing else on this laptop is changed: everything goes",
+      "echo   into the folder %%LOCALAPPDATA%%\\LaptopRemote. No administrator rights are needed.",
+      "echo.",
+      'if "%LOCALAPPDATA%"=="" goto failed',
+      "where curl.exe >nul 2>nul || goto old_windows",
+      "where tar.exe >nul 2>nul || goto old_windows",
+      'if not exist "%LOCALAPPDATA%\\LaptopRemote" mkdir "%LOCALAPPDATA%\\LaptopRemote"',
+      'cd /d "%LOCALAPPDATA%\\LaptopRemote" || goto failed',
+      "",
+      "echo   [1/4] Downloading Laptop Remote (github.com/bogdandata/laptop-remote)...",
+      `call :download "${ZIP_URL}" laptop-remote.zip || goto failed`,
+      "if exist new rmdir /s /q new",
+      "mkdir new",
+      "tar -xf laptop-remote.zip -C new || goto failed",
+      'if not exist "new\\laptop-remote-main\\server.py" goto failed',
+      'robocopy "new\\laptop-remote-main" app /E /XF config.ini /R:2 /W:1 /NFL /NDL /NJH /NJS /NP >nul',
+      "if errorlevel 8 goto failed",
+      'if not exist "app\\config.ini" copy /y "new\\laptop-remote-main\\config.ini" "app\\config.ini" >nul',
+      "rmdir /s /q new",
+      "del laptop-remote.zip",
+      "",
+      "echo   [2/4] Python (a private copy from python.org, used only by Laptop Remote)...",
+      'if exist "python\\python.exe" if exist "python\\python312._pth" goto python_ready',
+      'set "ARCH=amd64"',
+      'if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "ARCH=arm64"',
+      'if /i "%PROCESSOR_ARCHITECTURE%"=="x86" if not defined PROCESSOR_ARCHITEW6432 set "ARCH=win32"',
+      `call :download "https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-%ARCH%.zip" python.zip || goto failed`,
+      "if exist python rmdir /s /q python",
+      "mkdir python",
+      "tar -xf python.zip -C python || goto failed",
+      "del python.zip",
+      ":python_ready",
+      "rem The private Python finds Laptop Remote in the app folder next to it:",
+      '> "python\\python312._pth" echo python312.zip',
+      '>> "python\\python312._pth" echo .',
+      '>> "python\\python312._pth" echo ..\\app',
+      '"python\\python.exe" -c "import remote_crypto, sys; sys.exit(0 if remote_crypto.available() else 1)" || goto failed',
+      "",
+      "echo   [3/4] The invitation...",
+      `> "app\\invite.txt" echo ${token}`,
+      "",
+      "echo   [4/4] Starting Laptop Remote...",
+      "echo.",
+      'call "app\\run.bat" --setup',
+      "echo.",
+      "echo   Laptop Remote has stopped. It starts again by itself when you sign in to Windows.",
+      "echo   To remove it: uninstall.bat in the folder %%LOCALAPPDATA%%\\LaptopRemote\\app",
+      "echo.",
+      "pause",
+      "exit /b 0",
+      "",
+      ":download",
+      "rem Windows' own curl. Some antivirus programs break its certificate revocation check:",
+      "rem then it tries once more without that one check (the certificate itself is still checked).",
+      'curl.exe -fL --retry 3 --progress-bar -o "%~2" "%~1" && exit /b 0',
+      'curl.exe -fL --retry 3 --progress-bar --ssl-no-revoke -o "%~2" "%~1"',
+      "exit /b %errorlevel%",
+      "",
+      ":old_windows",
+      "echo   This Windows is too old for the setup: Windows 10 (version 1803 or newer) or 11 is needed.",
+      "echo.",
+      "pause",
+      "exit /b 1",
+      "",
+      ":failed",
+      "echo.",
+      "echo   Something did not work - see the lines above. Check the internet connection and",
+      "echo   start this file again. Nothing outside %%LOCALAPPDATA%%\\LaptopRemote was changed.",
+      "echo.",
+      "pause",
+      "exit /b 1",
+    ];
+    return lines.join("\r\n") + "\r\n";
+  }
+
+  const invite = readInvite();
+  if (invite.error) {
+    $("badText").textContent = invite.error;
+    $("bad").hidden = false;
+    return;
+  }
+  history.replaceState(null, "", location.pathname + location.search + "#i=" + invite.token);
+  document.querySelectorAll(".who").forEach((el) => (el.textContent = invite.name));
+  document.title = `Laptop Remote – invitation from ${invite.name}`;
+  $("notWindows").hidden = /Windows/.test(navigator.userAgent);
+  $("inviteText").value = location.href;
+  $("ok").hidden = false;
+
+  $("download").addEventListener("click", () => {
+    const blob = new Blob([installer(invite.token, invite.name)], { type: "application/octet-stream" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "LaptopRemote-setup.cmd";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    $("downloaded").hidden = false;
+  });
+  $("copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("inviteText").value); }
+    catch (e) { $("inviteText").select(); document.execCommand("copy"); }
+    $("copy").textContent = "Copied";
+  });
+})();
+</script>
+</body>
+</html>

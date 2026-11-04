@@ -187,6 +187,12 @@ class BITMAPINFO(ctypes.Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", DWORD * 3)]
 
 
+class SYSTEM_POWER_STATUS(ctypes.Structure):
+    _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
+                ("BatteryLifeTime", DWORD), ("BatteryFullLifeTime", DWORD)]
+
+
 if ON_WINDOWS:
     HANDLE = wintypes.HANDLE
     INT = ctypes.c_int
@@ -232,6 +238,11 @@ if ON_WINDOWS:
     _declare(kernel32.GetConsoleMode, (HANDLE, ctypes.POINTER(DWORD)), BOOL)
     _declare(kernel32.SetConsoleMode, (HANDLE, DWORD), BOOL)
     _declare(kernel32.SetConsoleTitleW, (wintypes.LPCWSTR,), BOOL)
+    # questions on the laptop (Yes / No)
+    _declare(user32.MessageBoxW, (HANDLE, wintypes.LPCWSTR, wintypes.LPCWSTR, UINT), INT)
+    # no sleep while the remote runs (on the charger)
+    _declare(kernel32.SetThreadExecutionState, (DWORD,), DWORD)
+    _declare(kernel32.GetSystemPowerStatus, (ctypes.POINTER(SYSTEM_POWER_STATUS),), BOOL)
 
 # Only one action at a time may send keys or mouse events (e.g. typing and
 # volume), otherwise they would get mixed up.
@@ -342,6 +353,63 @@ def set_window_title(title):
         kernel32.SetConsoleTitleW(title)
     except Exception:
         pass
+
+
+MB_YESNO = 0x00000004
+MB_ICONQUESTION = 0x00000020
+MB_SYSTEMMODAL = 0x00001000
+MB_SETFOREGROUND = 0x00010000
+MB_TOPMOST = 0x00040000
+IDYES = 6
+
+
+def ask_yes_no(title, text):
+    """Ask the person at the laptop a Yes / No question in a window on top of everything."""
+    if TEST_MODE:
+        answer = os.environ.get("LAPTOP_REMOTE_TEST_CONSENT", "yes").lower() == "yes"
+        _record(f"question: {title} -> {'yes' if answer else 'no'}")
+        return answer
+    flags = MB_YESNO | MB_ICONQUESTION | MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_TOPMOST
+    return user32.MessageBoxW(None, text, title, flags) == IDYES
+
+
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+
+
+def plugged_in():
+    """True if the laptop is on its charger (desktop PCs count as plugged in)."""
+    if TEST_MODE:
+        return True
+    status = SYSTEM_POWER_STATUS()
+    try:
+        if not kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+            return True
+    except Exception:
+        return True
+    return status.ACLineStatus != 0  # 0 = on battery, 1 = plugged in, 255 = unknown
+
+
+def keep_awake_while_plugged_in():
+    """
+    Runs in its own thread for as long as the remote runs: while the laptop is on its
+    charger, Windows does not go to sleep by itself (the screen may still turn off).
+    On battery, Windows' normal sleep settings apply. Closing the lid still works as set.
+    """
+    awake = None
+    while True:
+        wanted = plugged_in()
+        if wanted != awake:
+            flags = ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if wanted else 0)
+            if TEST_MODE:
+                _record(f"keep awake: {'on' if wanted else 'off'}")
+            else:
+                try:
+                    kernel32.SetThreadExecutionState(flags)
+                except Exception:
+                    return
+            awake = wanted
+        time.sleep(60)
 
 
 def copy_to_clipboard(text):
