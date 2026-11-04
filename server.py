@@ -5,6 +5,10 @@ Start it by double-clicking start.bat (or with the command:  py server.py ).
 Stop it with Ctrl+C, by typing Q + Enter in its window, from the phone, or
 by double-clicking stop.bat (which runs:  py server.py --stop ).
 Uses only the Python standard library.
+
+Installed from an invitation (setup.html), it is started by run.bat with
+--anywhere-only: then it listens only on this laptop itself (127.0.0.1) and is
+reachable only through the encrypted tunnel (control from anywhere).
 """
 
 import hashlib
@@ -30,12 +34,15 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import actions
+import anywhere
+import remote_crypto as rc
 
 BASE_DIR = Path(__file__).resolve().parent
-WEB_DIR = (BASE_DIR / "web").resolve()
+WEB_DIR = (BASE_DIR / "docs").resolve()  # the phone page (also published on GitHub Pages)
 CONFIG_FILE = BASE_DIR / "config.ini"
 DEVICES_FILE = BASE_DIR / "devices.json"
 
+VERSION = "3.0"
 DEFAULT_PORT = 8765
 MAX_TEXT_LENGTH = 5000
 MAX_FAILURES = 5
@@ -158,7 +165,12 @@ def _load_config():
         "port": _number(srv, "port", DEFAULT_PORT, 1, 65535, warnings),
         "volume_step": _number(srv, "volume_step", 1, 1, 10, warnings),
         "forget_days": _number(srv, "forget_phones_after_days", 30, 0, 3650, warnings),
+        "forget_days_anywhere": _number(srv, "forget_anywhere_after_days", 180, 0, 3650, warnings),
         "tailscale_auto": srv.get("tailscale_auto_connect", "yes").strip().lower() not in ("no", "0", "false", "off"),
+        "anywhere": srv.get("anywhere", "yes").strip().lower() not in ("no", "0", "false", "off"),
+        "keep_awake": srv.get("keep_awake", "yes").strip().lower() not in ("no", "0", "false", "off"),
+        "relay": (srv.get("relay") or anywhere.DEFAULT_RELAY).strip(),
+        "app_url": (srv.get("app_url") or anywhere.APP_URL).strip(),
         "programs": programs,
         "warnings": warnings,
     }
@@ -210,7 +222,7 @@ def load_devices():
     global _devices
     try:
         data = json.loads(DEVICES_FILE.read_text(encoding="utf-8"))
-        devices = [d for d in data.get("devices", []) if isinstance(d, dict) and d.get("key")]
+        devices = [d for d in data.get("devices", []) if isinstance(d, dict) and (d.get("key") or d.get("secret"))]
     except FileNotFoundError:
         devices = []
     except (OSError, ValueError, AttributeError):
@@ -275,7 +287,7 @@ def find_device(key):
     fingerprint = _fingerprint(key)
     with _devices_lock:
         for device in _devices:
-            if hmac.compare_digest(device["key"], fingerprint):
+            if device.get("key") and hmac.compare_digest(device["key"], fingerprint):
                 if time.time() - device.get("last_used", 0) > 60:
                     device["last_used"] = time.time()
                     _save_devices()
@@ -285,7 +297,49 @@ def find_device(key):
 
 def device_list():
     with _devices_lock:
-        return [{k: d.get(k) for k in ("id", "name", "via", "connected", "last_used")} for d in _devices]
+        return [{k: d.get(k) for k in ("id", "name", "via", "connected", "last_used", "kind")} for d in _devices]
+
+
+class AnywhereDevices:
+    """The connected-phones list, as the anywhere module needs it."""
+
+    @staticmethod
+    def add(device):
+        with _devices_lock:
+            _devices.append(device)
+            _save_devices()
+
+    @staticmethod
+    def secret(device_id):
+        with _devices_lock:
+            for device in _devices:
+                if device["id"] == device_id and device.get("secret"):
+                    if time.time() - device.get("last_used", 0) > 60:
+                        device["last_used"] = time.time()
+                        _save_devices()
+                    return rc.unb64(device["secret"])
+        return None
+
+    @staticmethod
+    def get(device_id):
+        with _devices_lock:
+            for device in _devices:
+                if device["id"] == device_id:
+                    return device
+        return None
+
+    @staticmethod
+    def mark_used(device_id):
+        with _devices_lock:
+            for device in _devices:
+                if device["id"] == device_id and not device.get("used"):
+                    device["used"] = True
+                    _save_devices()
+
+
+ANYWHERE = None  # the Anywhere object, when control from anywhere is on
+ONLY_ANYWHERE = False  # installed from an invitation: nothing listens on the home network
+RESTART = False  # set after an update from the app: run.bat starts the new version
 
 
 def forget_device(device_id):
@@ -305,16 +359,25 @@ def forget_all_devices():
         return count
 
 
-def forget_unused_devices(days):
-    if days <= 0:
-        return []
-    limit = time.time() - days * 86400
+def forget_unused_devices(days, anywhere_days):
+    """
+    Disconnect devices that were not used for a long time (0 days = never).
+    Devices for control from anywhere have their own, longer time. Returns [(name, days)].
+    """
+    now = time.time()
+
+    def limit(device):
+        return anywhere_days if device.get("kind") == "anywhere" else days
+
+    def too_old(device):
+        return limit(device) > 0 and device.get("last_used", 0) < now - limit(device) * 86400
+
     with _devices_lock:
-        old = [d["name"] for d in _devices if d.get("last_used", 0) < limit]
+        old = [d for d in _devices if too_old(d)]
         if old:
-            _devices[:] = [d for d in _devices if d.get("last_used", 0) >= limit]
+            _devices[:] = [d for d in _devices if not too_old(d)]
             _save_devices()
-        return old
+        return [(d["name"], limit(d)) for d in old]
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +471,7 @@ def turn_on_tailscale_https(port):
         except OSError:
             continue
     else:
-        print("  Tailscale is not installed on this laptop. See README, section 8.")
+        print("  Tailscale is not installed on this laptop. See README, section 9.")
         return 1
     detect_tailscale()
     if result.returncode == 0 and TAILSCALE["name"]:
@@ -441,9 +504,12 @@ def print_addresses(port, indent="      "):
     for address in home[1:]:
         print(f"{indent}{address:<32}  (another address, if the first one does not work)")
     if not anywhere and not TAILSCALE["name"]:
-        print(f"{indent}Away from home (5G)? Install Tailscale on the laptop and the phone (README, section 8).")
+        if ANYWHERE:
+            print(f"{indent}Away from home (5G, another country)? Control from anywhere, below (README, section 8).")
+        else:
+            print(f"{indent}Away from home (5G)? See README, sections 8 and 9.")
     elif not secure:
-        print(f"{indent}For a secure https link with no code: double-click tailscale-https.bat once (README, section 8).")
+        print(f"{indent}For a secure https link with no code: double-click tailscale-https.bat once (README, section 9).")
 
 
 def is_tailscale(ip):
@@ -520,8 +586,8 @@ def _watch_viewers():
 def _forget_unused_regularly():
     while True:
         time.sleep(3600)
-        days = config()["forget_days"]
-        for name in forget_unused_devices(days):
+        c = config()
+        for name, days in forget_unused_devices(c["forget_days"], c["forget_days_anywhere"]):
             log(f"disconnected (not used for {days} days): {name}")
 
 
@@ -622,6 +688,20 @@ def run_command(data, device, server):
         actions.scroll(_integer(data.get("amount", 0), -2400, 2400), data.get("horizontal") is True)
         return "Scrolled"
 
+    if command == "invite_device":
+        if data.get("confirmed") is not True:
+            raise ValueError("Confirmation on the phone is required.")
+        if not ANYWHERE:
+            raise ValueError("Control from anywhere is off on this laptop (anywhere = no in config.ini).")
+        try:
+            invite = anywhere.parse_invite(data.get("invite"))
+            ANYWHERE.accept_invite(invite, approved_by=device["name"])
+        except anywhere.AnywhereError as e:
+            raise ValueError(str(e))
+        except Exception as e:
+            raise actions.ActionError(f"The invitation could not be used ({e}).")
+        return f"Access given to {invite['name']}"
+
     if command == "forget_me" and device["id"] == "tailscale":
         raise ValueError("This phone is let in by your Tailscale account. To stop that, sign it out of "
                          "Tailscale, or set tailscale_auto_connect = no in config.ini.")
@@ -641,6 +721,28 @@ def run_command(data, device, server):
             raise ValueError("Confirmation on the phone is required.")
         threading.Thread(target=server.shutdown, daemon=True).start()
         return "The remote on the laptop is stopping"
+
+    if command == "update_app":
+        if data.get("confirmed") is not True:
+            raise ValueError("Confirmation on the phone is required.")
+        if not can_update_from_app():
+            raise ValueError("On this laptop, update with update.bat (it cannot restart by itself).")
+        try:
+            changed = apply_update(download_update(), keep={"run.bat"})
+        except Exception as e:
+            raise actions.ActionError(f"The update did not work ({e}). Nothing was changed.")
+        if not changed:
+            return f"Laptop Remote {VERSION} is already the newest version"
+        log(f"UPDATED from GitHub ({changed} files changed, asked by {device['name']}). Restarting...")
+        restart_soon(server)
+        return f"Updated ({changed} files). Laptop Remote restarts on the laptop — about a minute"
+
+    if command == "uninstall":
+        if data.get("confirmed") is not True:
+            raise ValueError("Confirmation on the phone is required.")
+        log(f"{device['name']} REMOVED Laptop Remote from this laptop: all access deleted, no more autostart.")
+        threading.Thread(target=lambda: (time.sleep(1), uninstall(), server.shutdown()), daemon=True).start()
+        return "Laptop Remote is removed from the laptop. All access is deleted."
 
     raise ValueError(f"Unknown command: {command}")
 
@@ -665,9 +767,15 @@ class Handler(BaseHTTPRequestHandler):
     def _log(self, text):
         log(f"{self.client_address[0]:<15}  {text}")
 
+    _capture = None         # used for encrypted (anywhere) requests: the answer is collected, not sent
+    _virtual_device = None  # the device of an encrypted request
+
     def _reply(self, status, body=b"", content_type="application/json; charset=utf-8", headers=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        if self._capture is not None:
+            self._capture.append((status, body, content_type, dict(headers or {})))
+            return
         try:
             self.send_response(status)
             if body or status != 204:
@@ -694,14 +802,24 @@ class Handler(BaseHTTPRequestHandler):
         self._reply(403, {"error": "Access is allowed only from the home network or your Tailscale network."})
         return False
 
+    def _client_ip(self):
+        """The real address of the device (behind the tunnel, Cloudflare tells it)."""
+        if self.client_address[0] == "127.0.0.1" and self.headers.get("Cf-Connecting-Ip"):
+            return self.headers.get("Cf-Connecting-Ip")[:64]
+        return self.client_address[0]
+
+    def _via_tunnel(self):
+        host = (self.headers.get("Host") or "").split(":")[0].lower()
+        return bool(self.headers.get("Cf-Connecting-Ip")) or host.endswith(".trycloudflare.com")
+
     def _blocked(self):
         """Seconds this device still has to wait after too many failed attempts (0 = none)."""
         with _failures_lock:
-            _, until = _failures.get(self.client_address[0], (0, 0))
+            _, until = _failures.get(self._client_ip(), (0, 0))
         return int(until - time.time()) + 1 if until > time.time() else 0
 
     def _failed(self, what):
-        ip = self.client_address[0]
+        ip = self._client_ip()
         with _failures_lock:
             count, _ = _failures.get(ip, (0, 0))
             count += 1
@@ -731,6 +849,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _device(self):
         """The connected phone making this request, or None (and an error reply)."""
+        if self._virtual_device:
+            return self._virtual_device
         device = self._tailscale_device()
         if device:
             return device
@@ -742,7 +862,7 @@ class Handler(BaseHTTPRequestHandler):
         device = find_device(given)
         if device:
             with _failures_lock:
-                _failures.pop(self.client_address[0], None)
+                _failures.pop(self._client_ip(), None)
             return device
         if given:  # a page opened without any key is not an attempt to guess one
             self._failed("unknown phone (not connected, or disconnected)")
@@ -762,13 +882,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         url = urlsplit(self.path)
         path = url.path
+        if self._via_tunnel() and self._capture is None:
+            self._reply(404, {"error": "Not found."})  # from the internet only encrypted requests (/e2e)
+            return
 
         if path == "/api/check":
             device = self._device()
             if device:
                 c = config()
                 self._reply(200, {"ok": True, "laptop": c["name"], "phone": device["name"], "phone_id": device["id"],
-                                  "test_mode": actions.TEST_MODE, "screen": list(actions.screen_size())})
+                                  "test_mode": actions.TEST_MODE, "screen": list(actions.screen_size()),
+                                  "version": VERSION, "can_update": can_update_from_app(),
+                                  "installed": ONLY_ANYWHERE})
             return
 
         if path == "/api/programs":
@@ -778,12 +903,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/phones":
-            if self._device():
+            device = self._device()
+            if device:
                 phones = device_list()
                 if TAILSCALE["login"] and config()["tailscale_auto"]:
                     phones.insert(0, {"id": "tailscale", "name": f"Your Tailscale devices ({TAILSCALE['login']})",
                                       "via": secure_link() or "", "connected": None, "last_used": None})
-                self._reply(200, {"phones": phones, "forget_days": config()["forget_days"]})
+                days = config()["forget_days_anywhere" if device.get("kind") == "anywhere" else "forget_days"]
+                self._reply(200, {"phones": phones, "forget_days": days})
             return
 
         if path == "/api/screen":
@@ -807,7 +934,10 @@ class Handler(BaseHTTPRequestHandler):
         if content_type.startswith("text/") or content_type in ("application/javascript", "application/json",
                                                                  "image/svg+xml"):
             content_type += "; charset=utf-8"
-        self._reply(200, file.read_bytes(), content_type)
+        body = file.read_bytes()
+        if file.name == "index.html":  # tell the page that it was opened from the laptop itself
+            body = body.replace(b"<head>", b'<head>\n<meta name="laptop-remote-local" content="1">', 1)
+        self._reply(200, body, content_type)
 
     def _screen(self, device, query):
         try:
@@ -853,7 +983,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         raw = self.rfile.read(length) if length else b""
         path = urlsplit(self.path).path
+        if path == "/e2e":
+            self._e2e(raw)
+            return
+        if self._via_tunnel():
+            self._reply(404, {"error": "Not found."})  # from the internet only encrypted requests (/e2e)
+            return
+        self._post_body(path, raw)
 
+    def _post_body(self, path, raw):
         if path == "/api/local/stop":
             # Used by stop.bat on this laptop. The header makes sure no website can do it.
             port = self.server.server_address[1]
@@ -907,6 +1045,60 @@ class Handler(BaseHTTPRequestHandler):
             if actions.TEST_MODE:
                 extra += "   [test mode, nothing was executed]"
             self._log(f"{device['name']}: {command}{extra}")
+
+    # ---- encrypted requests (control from anywhere) ----
+
+    CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "86400"}
+
+    def do_OPTIONS(self):
+        self._reply(204, headers=self.CORS)
+
+    def _e2e(self, raw):
+        if not ANYWHERE:
+            self._reply(404, {"error": "Control from anywhere is off on this laptop."}, headers=self.CORS)
+            return
+        wait = self._blocked()
+        if wait:
+            self._reply(429, {"error": f"Too many failed attempts. Wait {wait} s and try again."}, headers=self.CORS)
+            return
+        try:
+            device_id, request = anywhere.open_request(raw, ANYWHERE.secret_for_device, ANYWHERE.guard)
+        except rc.CryptoError:
+            self._failed("anywhere: a request that cannot be opened (unknown or disconnected device)")
+            self._reply(401, {"error": "This device is not connected to this laptop."}, headers=self.CORS)
+            return
+        except (anywhere.AnywhereError, ValueError) as e:
+            self._reply(400, {"error": str(e)}, headers=self.CORS)
+            return
+        with _failures_lock:
+            _failures.pop(self._client_ip(), None)
+        device = AnywhereDevices.get(device_id)
+        secret = AnywhereDevices.secret(device_id)  # taken now: "disconnect this phone" deletes it
+        ANYWHERE.mark_used(device_id)
+        method, inner = str(request.get("m", "GET")).upper(), str(request.get("p", ""))
+        inner_path = urlsplit(inner).path
+        if not inner_path.startswith("/api/") or inner_path in ("/api/connect", "/api/local/stop"):
+            status, body, content_type, headers = 404, b'{"error": "Not found."}', "application/json", {}
+        else:
+            status, body, content_type, headers = self._inner(method, inner, request.get("b"), device)
+        sealed = anywhere.seal_response(secret, device_id, request["r"], status, body, content_type, headers)
+        self._reply(200, sealed, "application/octet-stream", self.CORS)
+
+    def _inner(self, method, path, body, device):
+        """Run an API request inside this one, and collect its answer instead of sending it."""
+        saved_path = self.path
+        self._capture, self._virtual_device = [], device
+        try:
+            self.path = path
+            if method == "GET":
+                self._get()
+            else:
+                self._post_body(urlsplit(path).path, json.dumps(body if body is not None else {}).encode("utf-8"))
+        finally:
+            self.path = saved_path
+            captured, self._capture, self._virtual_device = self._capture, None, None
+        return captured[0] if captured else (500, b'{"error": "No answer."}', "application/json", {})
 
     def _connect(self, data):
         code = data.get("code")
@@ -963,8 +1155,11 @@ def print_link(port):
 
 def print_commands():
     print("  Type a letter here and press Enter:")
-    print("      L   new code for a phone")
-    print("      D   disconnect all phones (their access stops working)")
+    if ANYWHERE:
+        print("      A   add a phone or laptop for control from anywhere (paste its invitation)")
+    if not ONLY_ANYWHERE:
+        print("      L   new code for a phone")
+    print(f"      D   disconnect all {'devices' if ONLY_ANYWHERE else 'phones'} (their access stops working)")
     print("      Q   stop the remote")
     print(flush=True)
 
@@ -976,8 +1171,21 @@ def _console_commands(server, port):
         except (EOFError, OSError, ValueError, KeyboardInterrupt):
             return  # no keyboard (e.g. started without a window), or Ctrl+C
         command = line.strip().lower()
-        if command == "l":
+        if command == "l" and not ONLY_ANYWHERE:
             print_link(port)
+        elif command == "a" and ANYWHERE:
+            print("\n  Paste the invitation (the whole link from the app) and press Enter:", flush=True)
+            try:
+                text = input()
+                invite = anywhere.parse_invite(text)
+                ANYWHERE.accept_invite(invite, approved_by="the person at this laptop (typed in the window)")
+                print(f"\n  Done. “{invite['name']}” can now control this laptop from anywhere.\n", flush=True)
+            except anywhere.AnywhereError as e:
+                print(f"\n  {e}\n", flush=True)
+            except (EOFError, OSError, ValueError, KeyboardInterrupt):
+                return
+            except Exception as e:
+                print(f"\n  It did not work ({e}). Check the internet connection and try again.\n", flush=True)
         elif command == "d":
             count = forget_all_devices()
             print(f"\n  Disconnected phones: {count}. Their access does not work any more.")
@@ -1016,6 +1224,7 @@ def stop_running_copy(port):
             if len(parts) >= 5 and parts[1].endswith(f":{port}") and parts[2] in ("0.0.0.0:0", "[::]:0"):
                 subprocess.run(["taskkill", "/F", "/PID", parts[-1]], capture_output=True)
         time.sleep(1)
+    anywhere.kill_leftover_tunnel(BASE_DIR)
     if already_running(port):
         print(f"\n  Could not stop the program on port {port}. Close its window, or use")
         print("  Task Manager (Ctrl+Shift+Esc): click Python, then End task.")
@@ -1025,44 +1234,166 @@ def stop_running_copy(port):
 
 
 UPDATE_URL = "https://github.com/bogdandata/laptop-remote/archive/refs/heads/main.zip"
-KEEP_WHEN_UPDATING = {"config.ini", "devices.json", "update.bat"}  # your settings, your phones
+KEEP_WHEN_UPDATING = {"config.ini", "devices.json", "update.bat",  # your settings, your phones
+                      "anywhere.json", "invite.txt", "cloudflared.exe"}
+
+
+def download_update():
+    url = (os.environ.get("LAPTOP_REMOTE_TEST_UPDATE_URL") if actions.TEST_MODE else None) or UPDATE_URL
+    with urllib.request.urlopen(url, timeout=60) as response:
+        return zipfile.ZipFile(io.BytesIO(response.read()))
+
+
+def apply_update(archive, keep=()):
+    """Write the program files from the ZIP of GitHub. Returns how many files changed."""
+    files = {}
+    for name in archive.namelist():
+        _, _, relative = name.partition("/")  # inside the ZIP everything is in laptop-remote-main/
+        if relative and not name.endswith("/"):
+            files[relative] = name
+    if "server.py" not in files:
+        raise ValueError("the download did not contain the program")
+    base = BASE_DIR.resolve()
+    changed = 0
+    for relative, name in files.items():
+        if relative in KEEP_WHEN_UPDATING or relative in keep:
+            continue
+        target = (base / relative).resolve()
+        if base not in target.parents:
+            continue  # never write outside the program folder
+        data = archive.read(name)
+        try:
+            if target.read_bytes() == data:
+                continue  # unchanged files are not touched (e.g. a .bat file that is running)
+        except OSError:
+            pass
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        changed += 1
+    return changed
 
 
 def update_from_github(port):
     """Used by update.bat: download the newest version and replace the program files."""
-    url = (os.environ.get("LAPTOP_REMOTE_TEST_UPDATE_URL") if actions.TEST_MODE else None) or UPDATE_URL
     print("\n  Updating Laptop Remote. Your config.ini and your connected phones are kept.\n")
     if already_running(port):
         print("  1) Stopping the remote...")
         stop_running_copy(port)
     print("  2) Downloading the newest version from GitHub...")
     try:
-        with urllib.request.urlopen(url, timeout=60) as response:
-            archive = zipfile.ZipFile(io.BytesIO(response.read()))
+        archive = download_update()
     except Exception as e:
         print(f"\n  The download did not work ({e}).")
         print("  Check the internet connection and try again.")
         return 1
-    base = BASE_DIR.resolve()
-    updated = 0
-    for name in archive.namelist():
-        folder, _, relative = name.partition("/")  # inside the ZIP everything is in laptop-remote-main/
-        if not relative or name.endswith("/") or relative in KEEP_WHEN_UPDATING:
-            continue
-        target = (base / relative).resolve()
-        if base not in target.parents:
-            continue  # never write outside the program folder
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(archive.read(name))
-        updated += 1
-    if not updated:
-        print("\n  The download did not contain the program. Nothing was changed.")
+    try:
+        changed = apply_update(archive)
+    except (OSError, ValueError, zipfile.BadZipFile) as e:
+        print(f"\n  The update did not work ({e}). Nothing was changed.")
         return 1
-    print(f"  3) Done: {updated} files updated. Start the remote with start.bat.")
+    if changed:
+        print(f"  3) Done: {changed} files updated. Start the remote with start.bat.")
+    else:
+        print("  3) You already have the newest version. Start the remote with start.bat.")
+    return 0
+
+
+def can_update_from_app():
+    """Only when run.bat started the remote: it starts the new version after an update."""
+    return os.environ.get("LAPTOP_REMOTE_LAUNCHER") == "run.bat"
+
+
+def restart_soon(server):
+    """Stop in a second (the answer still reaches the app); run.bat then starts the new version."""
+    global RESTART
+    RESTART = True
+    threading.Thread(target=lambda: (time.sleep(1), server.shutdown()), daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# Installed from an invitation (setup.html makes the installer, which runs
+# run.bat --setup): start by itself at sign-in; remove again with uninstall.bat
+# ---------------------------------------------------------------------------
+
+STARTUP_FILE_NAME = "Laptop Remote.cmd"
+
+
+def _startup_file():
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        return None
+    return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / STARTUP_FILE_NAME
+
+
+def install_autostart():
+    """Start Laptop Remote (minimized) every time someone signs in to Windows."""
+    target = _startup_file()
+    if not target or not target.parent.is_dir():
+        return False
+    run = BASE_DIR / "run.bat"
+    local = os.environ.get("LOCALAPPDATA")
+    if local and run == (Path(local) / "LaptopRemote" / "app" / "run.bat").resolve():
+        run_text = r"%LOCALAPPDATA%\LaptopRemote\app\run.bat"  # no special letters inside the file
+    else:
+        run_text = str(run)
+    text = ("@echo off\r\n"
+            "rem Starts Laptop Remote (control from anywhere, end-to-end encrypted) when you sign in.\r\n"
+            "rem To stop that: delete this file, or run uninstall.bat in the Laptop Remote folder.\r\n"
+            f'start "Laptop Remote" /min "{run_text}" --autostart\r\n')
+    try:
+        target.write_bytes(text.encode("oem" if os.name == "nt" else "utf-8", errors="replace"))
+        return True
+    except OSError:
+        return False
+
+
+def setup_after_install(port):
+    """Used by the installer, right before the remote starts for the first time."""
+    if already_running(port):
+        print("  Laptop Remote is already running on this laptop. It is stopped; the new one starts now.")
+        stop_running_copy(port)
+    if install_autostart():
+        print("  Laptop Remote now starts by itself (minimized) every time you sign in to Windows.\n")
+
+
+def uninstall():
+    """No more autostart, and every phone and laptop loses its access. Returns True if autostart was on."""
+    target = _startup_file()
+    removed = False
+    if target and target.exists():
+        try:
+            target.unlink()
+            removed = True
+        except OSError:
+            pass
+    forget_all_devices()
+    for name in ("devices.json", "anywhere.json", "invite.txt"):
+        try:
+            (BASE_DIR / name).unlink()
+        except OSError:
+            pass
+    return removed
+
+
+def uninstall_from_window(port):
+    """Used by uninstall.bat."""
+    print("\n  Removing Laptop Remote from this laptop...")
+    if already_running(port):
+        stop_running_copy(port)
+    load_devices()
+    uninstall()
+    print("\n  Done. Laptop Remote does not start by itself any more,")
+    print("  and every phone and laptop has lost its access to this laptop.")
+    local = os.environ.get("LOCALAPPDATA")
+    folder = BASE_DIR.parent if local and BASE_DIR.parent == (Path(local) / "LaptopRemote").resolve() else BASE_DIR
+    print(f"\n  You can now delete this folder too:  {folder}")
+    if actions.ON_WINDOWS:
+        subprocess.Popen(["explorer", f"/select,{folder}"])
     return 0
 
 
 def main():
+    global ANYWHERE, ONLY_ANYWHERE
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
@@ -1070,71 +1401,117 @@ def main():
 
     data = config(first_time=True)
     port = data["port"]
-    if "--stop" in sys.argv[1:]:
+    args = sys.argv[1:]
+    if "--stop" in args:
         return stop_running_copy(port)
-    if "--tailscale-https" in sys.argv[1:]:
+    if "--tailscale-https" in args:
         return turn_on_tailscale_https(port)
-    if "--update" in sys.argv[1:]:
+    if "--update" in args:
         return update_from_github(port)
+    if "--uninstall" in args:
+        return uninstall_from_window(port)
+    ONLY_ANYWHERE = "--anywhere-only" in args  # run.bat: installed from an invitation
 
     actions.make_dpi_aware()
     actions.disable_quickedit()
+    if "--setup" in args:
+        setup_after_install(port)
     if already_running(port):
         print(f"\nERROR: the remote is already running on this laptop (port {port}).")
         print("Use the window (or VS Code terminal) where it is already running,")
         print("or stop it first: Ctrl+C in that window, or double-click stop.bat.")
         return 1
+    if ONLY_ANYWHERE and not rc.available():
+        print("\nERROR: control from anywhere is not available (OpenSSL was not found in this Python).")
+        return 1
     try:
-        server = RemoteServer(("0.0.0.0", port), Handler)
+        # Installed from an invitation: only this laptop itself (the tunnel) can connect.
+        server = RemoteServer(("127.0.0.1" if ONLY_ANYWHERE else "0.0.0.0", port), Handler)
     except OSError as e:
         print(f"\nERROR: the server cannot start on port {port} ({e}).")
         print("Another program is using this port. Close it, or change the port number in config.ini.")
         return 1
 
     load_devices()
-    detect_tailscale()
-    forgotten = forget_unused_devices(data["forget_days"])
+    if not ONLY_ANYWHERE:
+        detect_tailscale()
+    if data["anywhere"] or ONLY_ANYWHERE:
+        if rc.available():
+            ANYWHERE = anywhere.Anywhere(port, BASE_DIR, config, AnywhereDevices(), log, actions.ask_yes_no)
+        else:
+            print("  NOTE: control from anywhere is not available (OpenSSL was not found in this Python).")
+    forgotten = forget_unused_devices(data["forget_days"], data["forget_days_anywhere"])
     phones = device_list()
 
     print(LINE)
-    print(f"  LAPTOP REMOTE — running on “{data['name']}”")
+    print(f"  LAPTOP REMOTE {VERSION} — running on “{data['name']}”")
     print(LINE)
-    for name in forgotten:
-        print(f"  Disconnected (not used for {data['forget_days']} days): {name}")
-    tailscale_phones = bool(secure_link() and TAILSCALE["login"] and data["tailscale_auto"])
-    if phones or tailscale_phones:
-        if phones:
-            print(f"  Connected phones: {', '.join(p['name'] for p in phones)}")
-        if tailscale_phones:
-            print(f"  Your Tailscale devices ({TAILSCALE['login']}) are let in with no code.")
-        print("  Open on the phone:")
-        print_addresses(port)
-        print("  New phone without Tailscale? Type L and press Enter for a code.")
+    for name, days in forgotten:
+        print(f"  Disconnected (not used for {days} days): {name}")
+    if ONLY_ANYWHERE:
+        print("  CONTROL FROM ANYWHERE (any network, end-to-end encrypted): starting...")
+        names = ", ".join(p["name"] for p in phones)
+        print(f"  Allowed to control this laptop: {names or 'nobody yet'}")
+        print("  Only devices that were allowed here can connect, through the encrypted app.")
+        print("  Nothing on the home network can connect directly.")
+        if ANYWHERE and ANYWHERE.invite_file.exists():
+            print("\n  In a moment the laptop asks “Allow … to control this laptop?”.")
+            print("  Click Yes if you know that person (the first start downloads cloudflared: wait a minute).")
     else:
-        print("  No phone is connected to this laptop yet.")
-        print_link(port)
-    print(f"  Apps on the list: {len(data['programs'])} (the list is in config.ini)")
+        tailscale_phones = bool(secure_link() and TAILSCALE["login"] and data["tailscale_auto"])
+        if phones or tailscale_phones:
+            if phones:
+                print(f"  Connected phones: {', '.join(p['name'] for p in phones)}")
+            if tailscale_phones:
+                print(f"  Your Tailscale devices ({TAILSCALE['login']}) are let in with no code.")
+            print("  Open on the phone:")
+            print_addresses(port)
+            print("  New phone without Tailscale? Type L and press Enter for a code.")
+        else:
+            print("  No phone is connected to this laptop yet.")
+            print_link(port)
+        if ANYWHERE:
+            print("\n  CONTROL FROM ANYWHERE (any network, end-to-end encrypted): starting...")
+            print(f"      The app for your phone or another laptop:  {data['app_url']}")
+            print("      To add one: in the app tap “Add a laptop”, then type A here and paste the invitation.\n")
+        print(f"  Apps on the list: {len(data['programs'])} (the list is in config.ini)")
     for w in data["warnings"]:
         print(f"  WARNING in config.ini, {w}")
+    if data["keep_awake"]:
+        print("  While it runs and the laptop is on its charger, the laptop does not go to sleep by itself.")
     if actions.TEST_MODE:
         print("\n  TEST MODE: this is not Windows, commands are only logged.")
     print(LINE)
     print_commands()
-    print("  Keep this window open while you use the remote (you can minimize it).")
-    print("  To stop: type Q and Enter, press Ctrl+C, close the window, or run stop.bat.")
+    if ONLY_ANYWHERE:
+        print("  Keep this window open (you can minimize it). It starts by itself when you sign in.")
+        print("  To stop: type Q and Enter, or close the window.")
+        print(f"  To remove Laptop Remote from this laptop: uninstall.bat in {BASE_DIR}")
+    else:
+        print("  Keep this window open while you use the remote (you can minimize it).")
+        print("  To stop: type Q and Enter, press Ctrl+C, close the window, or run stop.bat.")
     print(LINE + "\n", flush=True)
 
     threading.Thread(target=_writer, daemon=True).start()
     threading.Thread(target=_watch_viewers, daemon=True).start()
     threading.Thread(target=_forget_unused_regularly, daemon=True).start()
     threading.Thread(target=_console_commands, args=(server, port), daemon=True).start()
+    if data["keep_awake"]:
+        threading.Thread(target=actions.keep_awake_while_plugged_in, daemon=True).start()
     actions.set_window_title("Laptop Remote")
+    if ANYWHERE:
+        ANYWHERE.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if ANYWHERE:
+            ANYWHERE.stop()
         server.server_close()
+    if RESTART:
+        print("\nRestarting with the new version...", flush=True)
+        return 3  # run.bat starts the remote again
     print("\nThe remote has stopped. Phones stay connected for the next time you start it.", flush=True)
     return 0
 

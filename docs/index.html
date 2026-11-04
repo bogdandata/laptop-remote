@@ -33,6 +33,27 @@
     max-width: 560px; margin: 0 auto;
   }
   [hidden] { display: none !important; }
+  .is-local .anywhere-only, .is-anywhere .local-only { display: none !important; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  .laptops { display: grid; gap: 10px; margin-bottom: 12px; }
+  .laptops button { min-height: 60px; flex-direction: row; justify-content: space-between; padding: 0 16px; font-weight: 600; }
+  .laptops button small { color: var(--muted); font-weight: 400; font-size: 13px; }
+  #invitePanel { background: var(--card); border-radius: 18px; padding: 14px; margin-top: 14px; }
+  #invitePanel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px 4px; }
+  #invitePanel ol { color: var(--muted); padding-left: 22px; margin: 12px 0; font-size: 15px; }
+  #invitePanel li { margin-bottom: 6px; }
+  .field { display: block; color: var(--muted); font-size: 14px; margin: 0 4px 10px; }
+  .field input {
+    display: block; width: 100%; margin-top: 6px; font: inherit; font-size: 17px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+  }
+  #inviteLink, #giveInvite { min-height: 84px; font-size: 14px; word-break: break-all; }
+  #inviteWait { color: var(--green); font-size: 15px; margin: 8px 4px 0; }
+  #inviteReady { margin: 0 4px; }
+  #laptopSelect {
+    font: inherit; font-size: 13px; color: var(--muted); background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 6px; margin-top: 4px; max-width: 100%;
+  }
 
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 2px 14px; }
   header h1 { font-size: 20px; margin: 0; overflow-wrap: anywhere; }
@@ -207,20 +228,45 @@
 
 <!-- ===== NOT CONNECTED ===== -->
 <div id="welcome" hidden>
-  <h1>Connect this phone</h1>
+  <h1 id="welcomeTitle">Connect this phone</h1>
+  <p class="lead anywhere-only">Control your laptops from anywhere — any network, end-to-end encrypted, nothing to install on this device.</p>
   <p id="welcomeMessage"></p>
-  <ol>
+  <div class="anywhere-only">
+    <div class="laptops" id="laptopList"></div>
+    <button class="primary wide" id="addLaptop">Add a laptop</button>
+    <div id="invitePanel" hidden>
+      <h2>Invitation for a laptop</h2>
+      <label class="field">Your name (the laptop will ask “Allow … to control this laptop?”)
+        <input id="inviteName" maxlength="40" autocomplete="off">
+      </label>
+      <button class="primary wide" id="makeInvite">Make the invitation</button>
+      <div id="inviteReady" hidden>
+        <textarea id="inviteLink" readonly aria-label="Invitation link"></textarea>
+        <div class="row two" style="margin-top:10px">
+          <button class="small" id="copyInvite">Copy</button>
+          <button class="small" id="mailInvite">E-mail</button>
+        </div>
+        <ol>
+          <li>Send this invitation to the laptop (e-mail, Viber, WhatsApp…).</li>
+          <li>On that laptop: open the link, download the file, start it, and click <b>Yes</b> when it asks.</li>
+          <li>Laptop Remote already runs there? Type <b>A</b> in its window and paste the invitation.</li>
+        </ol>
+        <p id="inviteWait">Waiting for the laptop… You can close this page; the invitation waits for 7 days.</p>
+      </div>
+    </div>
+  </div>
+  <ol class="local-only">
     <li>On the laptop, start <b>Laptop Remote</b> (double-click <b>start.bat</b>).</li>
     <li>Its window shows a <b>code</b> like <b>K7PQ-4XMZ</b>. No code there? Type <b>L</b> in the window and press <b>Enter</b>.</li>
     <li>Type the code here and tap <b>Connect</b>:</li>
   </ol>
-  <form id="codeForm" autocomplete="off">
+  <form id="codeForm" class="local-only" autocomplete="off">
     <input id="codeInput" type="text" autocapitalize="characters" autocomplete="off" autocorrect="off"
            spellcheck="false" maxlength="12" placeholder="ABCD-EFGH" aria-label="Code from the laptop">
     <button type="submit" class="primary wide">Connect</button>
   </form>
-  <p class="hint">You type the code only once (it works once, for 15 minutes). After that this phone stays connected — no PIN, no code.</p>
-  <p class="hint">On iPhone, a page added to the home screen has its own memory: open the icon and type the code there.
+  <p class="hint local-only">You type the code only once (it works once, for 15 minutes). After that this phone stays connected — no PIN, no code.</p>
+  <p class="hint">On iPhone, a page added to the home screen has its own memory: open the icon and do this there.
     Private mode, or a browser that deletes its data (like the DuckDuckGo flame button), forgets the connection.</p>
   <button class="wide" id="retry">Try again</button>
 </div>
@@ -231,6 +277,7 @@
     <div>
       <h1 id="laptopName">Laptop</h1>
       <small id="laptopInfo">connecting…</small>
+      <select id="laptopSelect" class="anywhere-only" aria-label="Choose a laptop" hidden></select>
     </div>
     <div class="status" id="status" title="Connection to the laptop"></div>
   </header>
@@ -360,22 +407,41 @@
   <!-- Settings -->
   <div class="tab" id="tab-settings" hidden>
     <section>
-      <h2>Phones connected to this laptop</h2>
+      <h2 class="local-only">Phones connected to this laptop</h2>
+      <h2 class="anywhere-only">Devices that can control this laptop</h2>
       <ul class="phones" id="phones"></ul>
       <p class="hint" id="forgetInfo"></p>
       <button class="wide" id="forgetMe">Disconnect this phone</button>
       <button class="wide danger" id="forgetAll">Disconnect all phones</button>
     </section>
+    <section class="anywhere-only">
+      <h2>Your laptops on this device</h2>
+      <button class="wide" id="settingsAddLaptop">Add another laptop</button>
+      <button class="wide" id="removeLaptop">Remove this laptop from this device</button>
+    </section>
+    <section class="anywhere-only">
+      <h2>Give another device access</h2>
+      <p>On the other device (another phone, or a laptop's browser), open this app and tap “Add a laptop” to make an invitation. Paste it here:</p>
+      <textarea id="giveInvite" placeholder="Paste the invitation link"></textarea>
+      <button class="wide primary" id="giveAccess">Give access to this laptop</button>
+    </section>
     <section>
       <h2>The program on the laptop</h2>
-      <p>Stops Laptop Remote on the laptop. This phone stays connected for the next time you start it.</p>
+      <p id="versionInfo"></p>
+      <button class="wide" id="updateRemote" hidden>Update Laptop Remote on the laptop</button>
+      <p>Stopping ends Laptop Remote on the laptop. This device stays connected for the next time it starts.</p>
       <button class="wide danger" id="stopRemote">Stop the remote</button>
+      <button class="wide danger" id="uninstallRemote" hidden>Remove Laptop Remote from the laptop</button>
     </section>
     <section>
       <h2>Tips</h2>
-      <p><b>Like an app:</b> add this page to your home screen (Chrome: menu ⋮ → Add to Home screen; Safari: share □↑ → Add to Home Screen). On iPhone the icon has its own memory: open it once and type a new code from the laptop there.</p>
-      <p><b>Another laptop:</b> start Laptop Remote on it and type its code on this phone. Each laptop gets its own page and icon.</p>
-      <p><b>Away from home:</b> use the phone's hotspot, or Tailscale (see the README).</p>
+      <p class="local-only"><b>Like an app:</b> add this page to your home screen (Chrome: menu ⋮ → Add to Home screen; Safari: share □↑ → Add to Home Screen). On iPhone the icon has its own memory: open it once and type a new code from the laptop there.</p>
+      <p class="local-only"><b>Another laptop:</b> start Laptop Remote on it and type its code on this phone. Each laptop gets its own page and icon.</p>
+      <p class="anywhere-only"><b>Like an app:</b> add this page to your home screen (Chrome: menu ⋮ → Add to Home screen; Safari: share □↑ → Add to Home Screen). On iPhone the icon has its own memory: add your laptops inside the icon (a new invitation each).</p>
+      <p class="anywhere-only"><b>Another laptop:</b> “Add another laptop” above. All your laptops are in the list at the top.</p>
+      <p class="anywhere-only"><b>Always reachable:</b> the laptop must be on, with internet, and someone signed in to Windows. On the charger it does not go to sleep by itself while Laptop Remote runs; set closing the lid to “Do nothing” if it is closed.</p>
+      <p class="local-only"><b>Away from home:</b> open <b>bogdandata.github.io/laptop-remote</b> — control from anywhere, encrypted (see the README).</p>
+      <p class="anywhere-only"><b>Encrypted:</b> everything is locked on this device and opened only on the laptop. The tunnel and the message service see only locked data.</p>
     </section>
   </div>
 </div>
@@ -446,8 +512,157 @@
     remove(k) { try { localStorage.removeItem(k); } catch (e) {} },
   };
   const NO_CONNECTION = "No connection to the laptop. Is the remote running on it, and are you on the same Wi-Fi?";
+
+  // Opened from the laptop itself (home Wi-Fi), or from the app on the internet (control from anywhere)?
+  const LOCAL = !!document.querySelector('meta[name="laptop-remote-local"]');
+  const ANYWHERE = !LOCAL;
+  document.documentElement.classList.add(ANYWHERE ? "is-anywhere" : "is-local");
+  if (ANYWHERE) document.getElementById("welcomeTitle").textContent = "Laptop Remote";
+  const NO_CONNECTION_ANYWHERE = "No connection to the laptop. Is it switched on, with internet, and is Laptop Remote running on it?";
+  const testRelay = /^(127\.0\.0\.1|localhost)$/.test(location.hostname) ? new URLSearchParams(location.search).get("relay") : null;
+  const RELAY = testRelay || "https://ntfy.sh";  // the free message service the laptops use to say where they are
+
+  // ---------- control from anywhere: encryption (AES-256-GCM, HKDF, ECDH P-256 — built into the browser) ----------
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  function b64(u8) {
+    let text = "";
+    for (let i = 0; i < u8.length; i += 0x8000) text += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function unb64(text) {
+    text = text.replace(/-/g, "+").replace(/_/g, "/");
+    while (text.length % 4) text += "=";
+    const raw = atob(text), out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  const hex = (u8) => [...u8].map((x) => x.toString(16).padStart(2, "0")).join("");
+  const unhex = (h) => new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
+  function concat(...parts) {
+    const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+    let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  }
+  async function hkdfKey(secret, info) {
+    const base = await crypto.subtle.importKey("raw", secret, "HKDF", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(32), info: enc.encode(info) }, base, 256);
+    return crypto.subtle.importKey("raw", bits, "AES-GCM", false, ["encrypt", "decrypt"]);
+  }
+  async function lock(cryptoKey, data, aad) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    return concat(iv, new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, cryptoKey, data)));
+  }
+  async function unlock(cryptoKey, message, aad) {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: message.slice(0, 12), additionalData: aad }, cryptoKey, message.slice(12)));
+  }
+  function netError(text) { const e = new Error(text); e.network = true; return e; }
+
+  // The laptops this device can control: their keys never leave this device.
+  const laptops = {
+    all() { try { return JSON.parse(store.get("laptops", "[]")); } catch (e) { return []; } },
+    save(list) { store.set("laptops", JSON.stringify(list)); },
+    current() { const list = this.all(); return list.find((l) => l.id === store.get("current")) || list[0] || null; },
+    put(lap) { const list = this.all().filter((l) => l.id !== lap.id); list.push(lap); this.save(list); },
+    remove(id) { this.save(this.all().filter((l) => l.id !== id)); if (store.get("current") === id) store.remove("current"); },
+  };
+  const keyCache = new Map();
+  async function laptopKeys(lap) {
+    if (!keyCache.has(lap.dev)) {
+      const secret = unb64(lap.s);
+      keyCache.set(lap.dev, { req: await hkdfKey(secret, "laptop-remote v3 request"), resp: await hkdfKey(secret, "laptop-remote v3 response") });
+    }
+    return keyCache.get(lap.dev);
+  }
+
+  async function relayPoll(relay, topic, since = "12h", timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${relay.replace(/\/$/, "")}/${topic}/json?poll=1&since=${since}`, { signal: controller.signal, cache: "no-store" });
+      if (!res.ok) throw new Error("message service " + res.status);
+      return (await res.text()).split("\n").map((line) => { try { return JSON.parse(line); } catch (e) { return null; } })
+        .filter((m) => m && m.event === "message" && typeof m.message === "string").map((m) => m.message);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Where is the laptop now? It leaves an encrypted note with its address every time it starts.
+  async function findLaptop(lap) {
+    let notes;
+    try { notes = await relayPoll(lap.relay, lap.pt); }
+    catch (e) { throw netError("Cannot reach the message service that tells where the laptop is. Check the internet connection."); }
+    const noteKey = await crypto.subtle.importKey("raw", unb64(lap.pk), "AES-GCM", false, ["decrypt"]);
+    let best = null;
+    for (const m of notes) {
+      if (!m.startsWith("lr3p.")) continue;
+      try {
+        const note = JSON.parse(dec.decode(await unlock(noteKey, unb64(m.slice(5)), enc.encode("lr3-ptr" + lap.id))));
+        if (note.id === lap.id && (!best || note.t > best.t)) best = note;
+      } catch (e) { /* not ours, or changed: ignore */ }
+    }
+    if (!best) throw netError(`“${lap.name}” is not online. It may be switched off or without internet, or Laptop Remote is not started on it.`);
+    lap.u = best.u;
+    laptops.put(lap);
+    return best.u;
+  }
+
+  function fakeResponse(status, type, headers, bytes) {
+    return {
+      status, ok: status >= 200 && status < 300,
+      headers: { get: (name) => { const k = Object.keys(headers).find((h) => h.toLowerCase() === name.toLowerCase()); return k ? headers[k] : null; } },
+      json: async () => JSON.parse(dec.decode(bytes)),
+      blob: async () => new Blob([bytes], { type }),
+    };
+  }
+
+  async function e2eOnce(lap, url, method, path, body, timeoutMs) {
+    const keys = await laptopKeys(lap);
+    const rid = hex(crypto.getRandomValues(new Uint8Array(8)));
+    const dev = unhex(lap.dev);
+    const plain = enc.encode(JSON.stringify({ m: method, p: path, b: body, t: Date.now(), r: rid }));
+    const sealed = concat(new Uint8Array([1]), dev, await lock(keys.req, plain, concat(enc.encode("lr3-req"), dev)));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res;
+    try {
+      res = await fetch(url.replace(/\/$/, "") + "/e2e", { method: "POST", headers: { "Content-Type": "text/plain" }, body: sealed, signal: controller.signal, cache: "no-store" });
+    } catch (e) {
+      throw netError(NO_CONNECTION_ANYWHERE);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status !== 200) {
+      if (res.status >= 500 || res.status === 404) throw netError(NO_CONNECTION_ANYWHERE);  // an old tunnel address
+      const data = await res.json().catch(() => ({}));
+      return fakeResponse(res.status, "application/json", {}, enc.encode(JSON.stringify(data)));
+    }
+    const payload = await unlock(keys.resp, new Uint8Array(await res.arrayBuffer()), concat(enc.encode("lr3-resp"), dev, enc.encode(rid)));
+    const size = new DataView(payload.buffer, payload.byteOffset).getUint32(0);
+    const header = JSON.parse(dec.decode(payload.subarray(4, 4 + size)));
+    if (header.r !== rid) throw new Error("A wrong answer arrived.");
+    return fakeResponse(header.s, header.c, header.h || {}, payload.subarray(4 + size));
+  }
+
+  async function e2eSend(path, options, timeoutMs) {
+    const lap = laptops.current();
+    if (!lap) throw new Error("Add a laptop first.");
+    const method = (options && options.method) || "GET";
+    const body = options && options.body ? JSON.parse(options.body) : null;
+    const url = lap.u || await findLaptop(lap);
+    try {
+      return await e2eOnce(lap, url, method, path, body, timeoutMs);
+    } catch (e) {
+      if (!e.network) throw e;
+      const fresh = await findLaptop(lap);  // the laptop may have restarted with a new address
+      if (fresh === url) { setStatus("error"); throw e; }
+      return await e2eOnce(lap, fresh, method, path, body, timeoutMs);
+    }
+  }
   let key = store.get("key");
   let phoneId = "";
+  let laptopInfo = {};  // what the laptop told about itself (version, can it update...)
   let currentTab = "remote";
   let connected = false;  // with our own key, or let in by Tailscale
 
@@ -467,6 +682,10 @@
   // If the laptop does not answer (the remote is stopped, the laptop is asleep,
   // another Wi-Fi...), stop waiting after a few seconds.
   async function send(path, options, timeoutMs) {
+    if (ANYWHERE) {
+      try { return await e2eSend(path, options, timeoutMs); }
+      catch (e) { setStatus("error"); throw e; }
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -488,6 +707,11 @@
     }
     const res = await send(path, options, timeoutMs);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && ANYWHERE) {
+      const lap = laptops.current();
+      disconnected(`This device was disconnected from “${lap ? lap.name : "the laptop"}”. To use it again, add the laptop again.`);
+      throw new Error(data.error || "This device is not connected to this laptop.");
+    }
     if (res.status === 401) {
       if (key) disconnected("This phone is not connected to this laptop any more. Get a new code on the laptop (type L + Enter in its window).");
       else showWelcome();  // not connected yet
@@ -526,13 +750,137 @@
     $("keyboard").hidden = true;
     $("welcome").hidden = false;
     $("welcomeMessage").textContent = message;
+    if (ANYWHERE) showLaptops();
+    $("retry").hidden = ANYWHERE && !laptops.all().length;  // nothing to try yet
   }
 
   function disconnected(message) {
+    if (ANYWHERE) {
+      const lap = laptops.current();
+      if (lap) laptops.remove(lap.id);
+      showWelcome(message);
+      return;
+    }
     key = "";
     store.remove("key");
     showWelcome(message);
   }
+
+  // ---------- anywhere: the list of laptops, invitations ----------
+  function showLaptops() {
+    const box = $("laptopList");
+    box.replaceChildren();
+    for (const lap of laptops.all()) {
+      const b = document.createElement("button");
+      const name = document.createElement("span");
+      name.textContent = lap.name;
+      const small = document.createElement("small");
+      small.textContent = "open";
+      b.append(name, small);
+      b.addEventListener("click", () => { store.set("current", lap.id); start(); });
+      box.appendChild(b);
+    }
+    $("addLaptop").textContent = laptops.all().length ? "Add another laptop" : "Add a laptop";
+    const pending = invites.all();
+    if (pending.length) showInvite(pending[pending.length - 1]);
+  }
+
+  const invites = {
+    all() { try { return JSON.parse(store.get("invites", "[]")).filter((i) => Date.now() / 1000 - i.t < 7 * 86400); } catch (e) { return []; } },
+    save(list) { store.set("invites", JSON.stringify(list)); },
+  };
+
+  function inviteLink(inv) {
+    const token = b64(enc.encode(JSON.stringify({ v: 1, pk: inv.pub, x: inv.inbox, n: inv.name, r: inv.relay, t: inv.t })));
+    return location.origin + location.pathname.replace(/[^/]*$/, "") + "setup.html#i=" + token;
+  }
+
+  function showInvite(inv) {
+    $("invitePanel").hidden = false;
+    $("inviteName").value = inv.name;
+    $("inviteLink").value = inviteLink(inv);
+    $("inviteReady").hidden = false;
+    $("makeInvite").hidden = true;
+    watchInbox();
+  }
+
+  $("addLaptop").addEventListener("click", () => {
+    $("invitePanel").hidden = false;
+    $("inviteReady").hidden = true;
+    $("makeInvite").hidden = false;
+    $("inviteName").value = $("inviteName").value || store.get("myName", phoneName());
+    $("inviteName").focus();
+  });
+
+  $("makeInvite").addEventListener("click", async () => {
+    if (!window.crypto || !crypto.subtle) { toast("This page must be opened with https.", true); return; }
+    const name = $("inviteName").value.trim().slice(0, 40) || phoneName();
+    store.set("myName", name);
+    // A key pair just for this invitation: the link carries only the PUBLIC key, so a copy of the
+    // e-mail is useless to anyone else. Only this device can open the laptop's answer.
+    const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    const inv = {
+      name, relay: RELAY, t: Math.floor(Date.now() / 1000),
+      inbox: "in" + b64(crypto.getRandomValues(new Uint8Array(16))),
+      pub: b64(new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey))),
+      priv: b64(new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey))),
+    };
+    invites.save(invites.all().concat(inv));
+    showInvite(inv);
+  });
+
+  $("copyInvite").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("inviteLink").value); toast("Copied"); }
+    catch (e) { $("inviteLink").select(); document.execCommand("copy"); toast("Copied"); }
+  });
+  $("mailInvite").addEventListener("click", () => {
+    const body = "Please open this link on the laptop, download the file, start it, and click Yes when it asks:\n\n" + $("inviteLink").value;
+    location.href = "mailto:?subject=" + encodeURIComponent("Laptop Remote invitation") + "&body=" + encodeURIComponent(body);
+  });
+
+  // The laptop answers the invitation on the message service, locked for this device only.
+  let inboxTimer = null;
+  function watchInbox() {
+    if (inboxTimer) return;
+    const check = async () => {
+      inboxTimer = null;
+      const pending = invites.all();
+      if (!pending.length) return;
+      for (const inv of pending) {
+        let messages = [];
+        try { messages = await relayPoll(inv.relay, inv.inbox); } catch (e) { continue; }
+        for (const m of messages) {
+          if (!m.startsWith("lr3a.")) continue;
+          try { await acceptAnswer(inv, m); return; } catch (e) { /* not for us */ }
+        }
+      }
+      if (document.visibilityState === "visible") inboxTimer = setTimeout(check, 10000);  // ntfy.sh: ~1 request per 5 s
+    };
+    inboxTimer = setTimeout(check, 500);
+  }
+
+  async function acceptAnswer(inv, message) {
+    const [, laptopPub, locked] = message.split(".");
+    const priv = await crypto.subtle.importKey("pkcs8", unb64(inv.priv), { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
+    const pub = await crypto.subtle.importKey("spki", unb64(laptopPub), { name: "ECDH", namedCurve: "P-256" }, false, []);
+    const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: pub }, priv, 256));
+    const k = await hkdfKey(shared, "laptop-remote v3 invite");
+    const a = JSON.parse(dec.decode(await unlock(k, unb64(locked), enc.encode("lr3-ann"))));
+    laptops.put({ id: a.id, name: a.name, dev: a.dev, s: a.s, pk: a.pk, pt: a.pt, relay: a.relay, u: a.u });
+    store.set("current", a.id);
+    invites.save(invites.all().filter((i) => i.inbox !== inv.inbox));
+    $("invitePanel").hidden = true;
+    toast(`“${a.name}” was added`);
+    await start();
+  }
+
+  function showLaptopChoice(current) {
+    const list = laptops.all();
+    const select = $("laptopSelect");
+    select.hidden = list.length < 2;
+    select.replaceChildren(...list.map((l) => { const o = document.createElement("option"); o.value = l.id; o.textContent = l.name; o.selected = l.id === current.id; return o; }));
+  }
+  $("laptopSelect").addEventListener("change", () => { store.set("current", $("laptopSelect").value); stopEverything(); start(); });
 
   async function connectWithCode(code) {
     showWelcome("Connecting…");
@@ -556,12 +904,17 @@
   }
 
   async function start() {
+    if (ANYWHERE && !laptops.current()) { showWelcome(); return; }
+    if (ANYWHERE && !(window.crypto && crypto.subtle)) { showWelcome("This page must be opened with https."); return; }
     try {
       const r = await api("/api/check");
       phoneId = r.phone_id;
+      laptopInfo = r;
+      showProgramInfo();
       $("laptopName").textContent = r.laptop;
-      $("laptopInfo").textContent = "Laptop Remote · " + r.phone + (r.test_mode ? " · test mode" : "");
-      document.title = r.laptop + " – Remote";
+      $("laptopInfo").textContent = "Laptop Remote · " + r.phone + (ANYWHERE ? " · from anywhere, encrypted" : "") + (r.test_mode ? " · test mode" : "");
+      document.title = ANYWHERE ? "Laptop Remote" : r.laptop + " – Remote";
+      if (ANYWHERE) showLaptopChoice(laptops.current());
       connected = true;
       $("welcome").hidden = true;
       $("app").hidden = false;
@@ -674,8 +1027,10 @@
   $("confirm").addEventListener("click", (e) => { if (e.target.id === "confirm") closeConfirm(false); });
 
   const confirmTexts = {
-    shutdown: ["Shut down the laptop?", "The laptop will shut down in 5 seconds. Anything unsaved in open programs may be lost.", "Yes, shut down"],
-    restart: ["Restart the laptop?", "The laptop will restart in 5 seconds. Anything unsaved in open programs may be lost.", "Yes, restart"],
+    shutdown: ["Shut down the laptop?", "The laptop will shut down in 5 seconds. Anything unsaved in open programs may be lost." +
+      (ANYWHERE ? " From far away nobody can switch it on again." : ""), "Yes, shut down"],
+    restart: ["Restart the laptop?", "The laptop will restart in 5 seconds. Anything unsaved in open programs may be lost." +
+      (ANYWHERE ? " Laptop Remote starts again only after someone signs in to Windows on the laptop (or it signs in by itself)." : ""), "Yes, restart"],
   };
 
   // ---------- volume: tap = one step, hold = keeps changing while held ----------
@@ -1014,30 +1369,76 @@
         if (p.id === phoneId) {
           const tag = document.createElement("span");
           tag.className = "tag";
-          tag.textContent = "this phone";
+          tag.textContent = "this " + THING;
           li.appendChild(tag);
         }
         list.appendChild(li);
       }
       $("forgetInfo").textContent = (phoneId === "tailscale"
         ? "This phone is let in by your Tailscale account (signed in to the same account as the laptop). "
-        : "") + (r.forget_days ? `A phone that is not used for ${r.forget_days} days is disconnected automatically.` : "");
+        : "") + (r.forget_days ? `A ${THING} that is not used for ${r.forget_days} days is disconnected automatically.` : "");
       $("forgetMe").hidden = phoneId === "tailscale";
     } catch (e) {
       list.replaceChildren();
       toast(e.message, true);
     }
   }
+  // From anywhere, the list holds phones and laptops: "devices". At home it is about phones.
+  const THING = ANYWHERE ? "device" : "phone";
+  const AGAIN = ANYWHERE ? "a new invitation (Add a laptop), allowed on the laptop" : "a new code from the laptop";
+  if (ANYWHERE) {
+    $("forgetMe").textContent = "Disconnect this device";
+    $("forgetAll").textContent = "Disconnect all devices";
+  }
   $("forgetMe").addEventListener("click", async () => {
-    if (!(await ask("Disconnect this phone?", "To use it again, you will need a new code from the laptop.", "Yes, disconnect"))) return;
-    if (await command({ command: "forget_me" }, true)) disconnected("This phone is disconnected. To connect it again, get a new code on the laptop.");
+    if (!(await ask(`Disconnect this ${THING}?`, `To use it again, you will need ${AGAIN}.`, "Yes, disconnect"))) return;
+    if (await command({ command: "forget_me" }, true)) disconnected(`This ${THING} is disconnected. To connect it again, you need ${AGAIN}.`);
   });
   $("forgetAll").addEventListener("click", async () => {
-    if (!(await ask("Disconnect all phones?", "All phones lose access, this one too. To use the remote again, you will need a new code from the laptop.", "Yes, disconnect all"))) return;
-    if (await command({ command: "forget_all", confirmed: true }, true)) disconnected("All phones are disconnected. To connect again, get a new code on the laptop.");
+    const who = ANYWHERE ? "All phones and laptops lose access" : "All phones lose access";
+    if (!(await ask(`Disconnect all ${THING}s?`, `${who}, this one too. To use the remote again, you will need ${AGAIN}.`, "Yes, disconnect all"))) return;
+    if (await command({ command: "forget_all", confirmed: true }, true)) disconnected(`All ${THING}s are disconnected. To connect again, you need ${AGAIN}.`);
+  });
+  $("settingsAddLaptop").addEventListener("click", () => { stopEverything(); showWelcome(); $("addLaptop").click(); });
+  $("removeLaptop").addEventListener("click", async () => {
+    const lap = laptops.current();
+    if (!lap || !(await ask(`Remove “${lap.name}”?`, "It is removed only from this device. The laptop still lets in its other devices.", "Yes, remove"))) return;
+    laptops.remove(lap.id);
+    if (laptops.current()) start(); else showWelcome();
+  });
+  $("giveAccess").addEventListener("click", async () => {
+    const text = $("giveInvite").value.trim();
+    if (!text) { toast("Paste the invitation from the other device first.", true); return; }
+    if (!(await ask("Give access?", "The device that made this invitation will be able to control this laptop from anywhere.", "Yes, give access", false))) return;
+    if (await command({ command: "invite_device", invite: text, confirmed: true })) $("giveInvite").value = "";
+  });
+  function showProgramInfo() {
+    $("versionInfo").textContent = laptopInfo.version ? `Laptop Remote ${laptopInfo.version} runs on the laptop.` : "";
+    $("updateRemote").hidden = !laptopInfo.can_update;
+    $("uninstallRemote").hidden = !laptopInfo.installed;
+  }
+  function waitForRestart(message) {
+    showWelcome(message);
+    setTimeout(() => { if (!$("welcome").hidden) start(); }, 40000);
+  }
+  $("updateRemote").addEventListener("click", async () => {
+    if (!(await ask("Update Laptop Remote?", "The laptop downloads the newest version from GitHub and restarts Laptop Remote. It takes about a minute.", "Yes, update", false))) return;
+    toast("Updating…");
+    try {
+      const r = await api("/api/command", { command: "update_app", confirmed: true }, 90000);
+      if (/restarts/.test(r.message)) waitForRestart("Laptop Remote is restarting on the laptop with the new version. Wait a minute — this page tries again by itself.");
+      else toast(r.message);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
+  $("uninstallRemote").addEventListener("click", async () => {
+    if (!(await ask("Remove Laptop Remote from the laptop?", "It stops, it does not start by itself any more, and every phone and laptop loses its access. Only someone at the laptop can set it up again.", "Yes, remove it"))) return;
+    if (await command({ command: "uninstall", confirmed: true }, true)) disconnected("Laptop Remote was removed from the laptop. All access is deleted.");
   });
   $("stopRemote").addEventListener("click", async () => {
-    if (!(await ask("Stop the remote?", "Laptop Remote stops on the laptop. To use it again, start it on the laptop (start.bat).", "Yes, stop it"))) return;
+    const far = ANYWHERE ? " From far away nobody can start it again — someone at the laptop has to." : "";
+    if (!(await ask("Stop the remote?", "Laptop Remote stops on the laptop. To use it again, start it on the laptop (start.bat)." + far, "Yes, stop it"))) return;
     if (await command({ command: "stop_remote", confirmed: true }, true)) {
       showWelcome("The remote on the laptop is stopped. Start it again on the laptop, then tap Try again.");
     }
@@ -1070,10 +1471,16 @@
     return true;
   }
   // The link can also be opened in a tab where this page is already open.
-  window.addEventListener("hashchange", openedWithLink);
-  // Without a key the laptop may still let this phone in: through the secure Tailscale
-  // link, a device of the same Tailscale account needs no code.
-  if (!openedWithLink()) start();
+  if (ANYWHERE) {
+    start();
+    if (invites.all().length) watchInbox();
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && invites.all().length) watchInbox(); });
+  } else {
+    window.addEventListener("hashchange", openedWithLink);
+    // Without a key the laptop may still let this phone in: through the secure Tailscale
+    // link, a device of the same Tailscale account needs no code.
+    if (!openedWithLink()) start();
+  }
 })();
 </script>
 </body>

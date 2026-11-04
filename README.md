@@ -1,25 +1,34 @@
 # Laptop Remote
 
-Control your Windows laptop from your phone over your home Wi-Fi: music, volume, apps, typing —
+Control a Windows laptop from your phone or from another computer: music, volume, apps, typing —
 and you can also **see the laptop screen, click on it, and use your phone as a touchpad and keyboard**.
 
-Nothing gets installed on the phone. The laptop runs a small program, and the phone opens it in
-its browser (Chrome, Safari…). There is **no PIN**: you connect a phone once with a one-time code
-(or a link), and after that it just works — until you disconnect it.
+There are two ways to use it:
 
-| Tab on the phone | What you can do |
+- **From anywhere** — any network, 5G, another country — **end-to-end encrypted** (new in version 3).
+  Open the app at **<https://bogdandata.github.io/laptop-remote/>**, make an invitation and send it by e-mail.
+  On the laptop, someone opens the link, downloads one file, starts it and clicks **Yes**. That's all.
+  → [section 8](#8-control-from-anywhere-any-network-end-to-end-encrypted)
+- **At home**, on the same Wi-Fi: start `start.bat` on the laptop and type a one-time code on the phone.
+  → sections 1–6
+
+Nothing gets installed on the phone: it uses its browser (Chrome, Safari…). There is **no PIN**: a device
+is connected once, and after that it just works — until you disconnect it.
+
+| Tab in the app | What you can do |
 |---|---|
 | **Remote** | Music (previous / play-pause / next) · Volume (down / mute / up, hold to keep changing) · your apps and websites from `config.ini` · Lock screen · Restart · Shut down (restart and shut down ask first) |
 | **Screen** | A live picture of the laptop screen, and **a touchpad right under it**: tap the picture = click there, hold = right click; slide on the touchpad = move the mouse; Left / Hold / Right click and Scroll buttons; a keyboard button for keys and typing |
 | **Touchpad** | A big touchpad for when you look at the laptop (or a TV) itself, with mouse buttons, speed, keys (Esc, Tab, Win, Alt+Tab, arrows, Backspace, Enter, Ctrl+C, Ctrl+V) and typing text |
-| **Settings** | Phones connected to the laptop · Disconnect this phone · Disconnect all phones · Stop the remote |
+| **Settings** | Devices connected to the laptop · Disconnect · Stop the remote · from anywhere also: your laptops, give another device access, update or remove Laptop Remote on the laptop |
 
-All you need is Python. No extra packages are required (no `pip install`). Keys and the mouse are
-sent with `ctypes` (part of Python), the screen picture is made with Windows' own drawing functions,
-and shut down / restart use the `shutdown` command that is built into every Windows.
+On the laptop it needs only Python (the setup from an invitation brings its own private copy), with no extra
+packages (no `pip install`). Keys and the mouse are sent with `ctypes` (part of Python), the screen picture is made
+with Windows' own drawing functions, and shut down / restart use the `shutdown` command that is built into every
+Windows. For control from anywhere it also uses Cloudflare's tunnel program, which it downloads by itself (section 8).
 
-**New in version 2:** no PIN (a one-time code or link instead), screen view with clicking, touchpad,
-keyboard keys, disconnecting phones, stopping from the phone or with `stop.bat`, several laptops, Tailscale.
+**New in version 3:** control from anywhere, end-to-end encrypted, with invitations by e-mail; several laptops in one
+app; a one-file setup for a laptop far away; update and remove from far away; the laptop does not fall asleep on its charger.
 
 ---
 
@@ -32,15 +41,16 @@ keyboard keys, disconnecting phones, stopping from the phone or with `stop.bat`,
 5. [Using the remote](#5-using-the-remote)
 6. [Stop the remote, disconnect phones](#6-stop-the-remote-disconnect-phones)
 7. [More laptops](#7-more-laptops)
-8. [Away from home: hotspot or Tailscale](#8-away-from-home-hotspot-or-tailscale)
-9. [Add your own apps and websites](#9-add-your-own-apps-and-websites)
-10. [Windows Firewall — allow it only on private networks](#10-windows-firewall--allow-it-only-on-private-networks)
-11. [Make your network "private"](#11-make-your-network-private)
-12. [Other settings](#12-other-settings)
-13. [Start automatically with Windows](#13-start-automatically-with-windows)
-14. [Update to a new version](#14-update-to-a-new-version)
-15. [Troubleshooting](#15-troubleshooting)
-16. [Security](#16-security)
+8. [Control from anywhere (any network, end-to-end encrypted)](#8-control-from-anywhere-any-network-end-to-end-encrypted)
+9. [Away from home without the app: hotspot or Tailscale](#9-away-from-home-without-the-app-hotspot-or-tailscale)
+10. [Add your own apps and websites](#10-add-your-own-apps-and-websites)
+11. [Windows Firewall — allow it only on private networks](#11-windows-firewall--allow-it-only-on-private-networks)
+12. [Make your network "private"](#12-make-your-network-private)
+13. [Other settings](#13-other-settings)
+14. [Start automatically with Windows](#14-start-automatically-with-windows)
+15. [Update to a new version](#15-update-to-a-new-version)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Security](#17-security)
 
 ---
 
@@ -84,7 +94,7 @@ into **Downloads\laptop-remote-main** and starts it:
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; cd $HOME\Downloads; Invoke-WebRequest https://github.com/bogdandata/laptop-remote/archive/refs/heads/main.zip -OutFile laptop-remote.zip -UseBasicParsing; Expand-Archive laptop-remote.zip -DestinationPath . -Force; cd laptop-remote-main; py server.py
 ```
 
-Run this long command only the first time (to update later, see [section 14](#14-update-to-a-new-version)).
+Run this long command only the first time (to update later, see [section 15](#15-update-to-a-new-version)).
 
 In the project folder you should see:
 
@@ -92,11 +102,16 @@ In the project folder you should see:
 start.bat            ← double-click to start the remote
 stop.bat             ← double-click to stop it (even if you can't find its window)
 update.bat           ← double-click to get the newest version (keeps your settings and phones)
-tailscale-https.bat  ← double-click once for the secure link with Tailscale (section 8)
+tailscale-https.bat  ← double-click once for the secure link with Tailscale (section 9)
+run.bat              ← used by the setup from an invitation (section 8)
+uninstall.bat        ← removes Laptop Remote from the laptop: no autostart, all access deleted
 config.ini           ← your settings and the list of apps
 server.py            ← the program itself
 actions.py           ← the actions the laptop performs
-web\index.html       ← the page the phone shows
+anywhere.py          ← control from anywhere (the tunnel, invitations, encrypted requests)
+remote_crypto.py     ← the encryption (AES-256-GCM, with the OpenSSL that comes with Python)
+docs\index.html      ← the app (the laptop serves it at home; GitHub Pages publishes it for anywhere)
+docs\setup.html      ← the page an invitation opens: it makes the setup file
 README.md            ← this guide
 ```
 
@@ -108,7 +123,7 @@ A black window opens. The first time it looks roughly like this:
 
 ```
 ==================================================================
-  LAPTOP REMOTE — running on “MY-LAPTOP”
+  LAPTOP REMOTE 3.0 — running on “MY-LAPTOP”
 ==================================================================
   No phone is connected to this laptop yet.
 
@@ -116,16 +131,23 @@ A black window opens. The first time it looks roughly like this:
 
     1. On the phone, open:
          http://192.168.1.23:8765          at home (the same Wi-Fi as the laptop)
-         Away from home (5G)? Install Tailscale on the laptop and the phone (README, section 8).
+         Away from home (5G, another country)? Control from anywhere, below (README, section 8).
 
     2. Type this code:   K7PQ-4XMZ
 
   Or open this link on the phone (it is already copied, e.g. to e-mail it):
       http://192.168.1.23:8765/?code=K7PQ-4XMZ
 
+
+  CONTROL FROM ANYWHERE (any network, end-to-end encrypted): starting...
+      The app for your phone or another laptop:  https://bogdandata.github.io/laptop-remote/
+      To add one: in the app tap “Add a laptop”, then type A here and paste the invitation.
+
   Apps on the list: 5 (the list is in config.ini)
+  While it runs and the laptop is on its charger, the laptop does not go to sleep by itself.
 ==================================================================
   Type a letter here and press Enter:
+      A   add a phone or laptop for control from anywhere (paste its invitation)
       L   new code for a phone
       D   disconnect all phones (their access stops working)
       Q   stop the remote
@@ -137,8 +159,10 @@ A black window opens. The first time it looks roughly like this:
 
 - **Keep that window open** while you use the remote (you can minimize it). Every action from the phone
   shows up in it, e.g. `20:15:03  192.168.1.50     Android phone: volume_up`.
+- A few seconds later it shows `Anywhere: ON — reachable through an encrypted tunnel (https://….trycloudflare.com)`.
+  The first time it downloads Cloudflare's tunnel program first (section 8). To switch that off: `anywhere = no` in `config.ini`.
 - **The first time**, Windows will probably show a Windows Firewall window: follow
-  [section 10](#10-windows-firewall--allow-it-only-on-private-networks).
+  [section 11](#11-windows-firewall--allow-it-only-on-private-networks).
 - If Windows warns you when you double-click ("Windows protected your PC" or "The publisher could not be
   verified"), click **More info → Run anyway**, or **Run**. This doesn't happen if you unblocked the ZIP.
 
@@ -146,8 +170,8 @@ A black window opens. The first time it looks roughly like this:
 
 You do this **once per phone**. There is no PIN.
 
-> **Easiest of all:** with Tailscale and the secure link (section 8) there is no code either — the phone just opens the
-> link. The steps below are for the home Wi-Fi without Tailscale.
+> **From anywhere** (also at home, with no code): use the app and an invitation, [section 8](#8-control-from-anywhere-any-network-end-to-end-encrypted).
+> The steps below are for a phone on the same Wi-Fi as the laptop.
 
 1. The phone must be on the **same Wi-Fi** as the laptop (not on mobile data, not on a "guest" network).
 2. On the phone, open the browser and type the address from the black window, e.g. `http://192.168.1.23:8765`
@@ -216,20 +240,127 @@ There are two different things:
 **Disconnect phones:**
 - On the phone: **Settings → Disconnect this phone**, or **Disconnect all phones**.
 - On the laptop, in the remote's window: type **D** and press **Enter** (all phones; links that were not used yet stop working too).
-- A phone that is not used for **30 days** is disconnected automatically (you can change this, see section 12).
+- A phone that is not used for **30 days** is disconnected automatically (you can change this, see section 13).
 
 ## 7. More laptops
 
-Do sections 2–4 on each laptop: download the project, start it, and type that laptop's code on your phone.
-You can send yourself the GitHub link (or the command from section 2) by e-mail and open it on the other laptop.
+**Easiest: the app from anywhere** (section 8). All your laptops are in one app, with a choice at the top. Add each one
+with an invitation.
 
-Each laptop gets its own page and its **own icon** on the phone, named after the laptop. To change the name,
-set `name =` in that laptop's `config.ini` (section 12).
+**At home on the Wi-Fi:** do sections 2–4 on each laptop: download the project, start it, and type that laptop's code on
+your phone. You can send yourself the GitHub link (or the command from section 2) by e-mail and open it on the other
+laptop. Each laptop gets its own page and its **own icon** on the phone, named after the laptop.
+
+To change a laptop's name, set `name =` in that laptop's `config.ini` (section 13).
 
 A web page alone can't control a computer (browsers don't allow that, for safety), so the remote must run on
 each laptop you want to control.
 
-## 8. Away from home: hotspot or Tailscale
+## 8. Control from anywhere (any network, end-to-end encrypted)
+
+Control a laptop from another network — 5G, another Wi-Fi, another country — from your phone's browser or from
+another laptop's browser. Nobody has to change anything on a router, and nothing is installed on the phone.
+
+```
+ your phone / laptop     ── https ──►   Cloudflare tunnel   ──►   the laptop (Laptop Remote)
+ (the app, a web page)                  sees only locked data
+```
+
+- The laptop connects **out** to the internet through Cloudflare's free tunnel. Laptop Remote downloads Cloudflare's
+  official tunnel program `cloudflared.exe` once (from Cloudflare's GitHub page) and runs it while it runs.
+- The tunnel gets a new address every time the laptop starts. The laptop leaves that address as an **encrypted note**
+  on a free message service, ntfy.sh. Only your devices can open the note.
+- **Every request and every answer is locked with AES-256-GCM** on one side and opened only on the other. Each device
+  has its own key. Cloudflare and ntfy.sh see only locked data — not the screen, not what you type, not the address.
+- **An invitation contains only a public key.** If someone else reads the e-mail, it is of no use to them: only the
+  device that made the invitation can open the laptop's answer. And the laptop gives access only after someone at the
+  laptop clicks **Yes** (or types the invitation into its window).
+
+### Once: switch on the app's address (only the owner of the GitHub project)
+
+The app is the page `docs/index.html`, published from this project by GitHub Pages:
+
+1. On GitHub, open the project → **Settings** → **Pages** (on the left).
+2. Under **Build and deployment**: **Source: Deploy from a branch**, **Branch: main**, folder **/docs** → **Save**.
+3. After a minute or two, <https://bogdandata.github.io/laptop-remote/> opens the app.
+
+### Add a laptop that is far away (for example your family's)
+
+1. **On your phone**, open **<https://bogdandata.github.io/laptop-remote/>**. (Add it to the home screen: Chrome menu
+   **⋮** → **Add to Home screen**; Safari **□↑** → **Add to Home Screen**. On iPhone, then use only the icon.)
+2. Tap **Add a laptop**, write your name (the laptop will ask "Allow *your name* …?"), tap **Make the invitation**,
+   then **E-mail** (or **Copy** and send it by Viber, WhatsApp…).
+3. **On that laptop** (Windows 10 or 11), someone opens the link from the e-mail, clicks **Download the setup** and
+   opens the downloaded file `LaptopRemote-setup.cmd`:
+   - If the browser warns about the file: **Keep** (Edge: **…** → **Keep** → **Show more** → **Keep anyway**).
+   - If Windows shows **"Windows protected your PC"**: **More info** → **Run anyway**.
+   - A black window downloads everything (a minute or two), and the laptop asks
+     **"Allow *your name* to control this laptop from anywhere?"** → **Yes**.
+   - The black window can be minimized, but it should stay open.
+4. **Your phone finds the laptop by itself** within a few seconds while the app is open. (Closed it? Open it later:
+   the invitation waits for 7 days.)
+
+What the setup does — it is a short text file, anyone can read it in Notepad first:
+- Everything goes into **one folder, `%LOCALAPPDATA%\LaptopRemote`**. No administrator rights; nothing else is changed.
+- It downloads this project from GitHub and a private copy of Python from python.org (the official "embeddable
+  package", used only by Laptop Remote; it does not touch an installed Python). Then Laptop Remote downloads `cloudflared`.
+- It starts Laptop Remote, and makes it start by itself (minimized) whenever someone signs in to Windows
+  (a file `Laptop Remote.cmd` in the Startup folder).
+- **This copy listens only to the laptop itself**: nothing on the home network can connect to it, and the Windows
+  Firewall does not ask anything. It is controlled only through the app, encrypted.
+
+### Add a laptop where Laptop Remote already runs (for example your own)
+
+Start it as in section 3 (`start.bat`; an older copy: update it first, section 15). In the app tap **Add a laptop** →
+**Make the invitation** → **Copy**. In the laptop's black window type **A**, press **Enter**, paste the invitation
+(right-click in the window) and press **Enter**. The app shows the laptop a few seconds later.
+
+### Another device for the same laptop
+
+For example your laptop in Germany, too: open the app in its browser → **Add a laptop** → **Make the invitation** →
+**Copy**, and send it to your phone. On the phone (already connected to that laptop): **Settings** →
+**Give another device access** → paste → **Give access**. Nobody at the far laptop has to do anything.
+
+### Using it
+
+The same tabs as at home. With more than one laptop, choose it at the top (the app remembers the choice). The
+**Screen** picture over the internet is slower than at home: choose **Fast**.
+
+In **Settings** (for a laptop set up from an invitation):
+- **Update Laptop Remote on the laptop** — downloads the newest version from GitHub and restarts it (about a minute).
+- **Remove Laptop Remote from the laptop** — it stops, does not start by itself any more, and every device loses access.
+- **Stop the remote** — from far away nobody can start it again; it starts again at the next sign-in to Windows.
+
+### Taking the access away
+
+- In the app: **Settings → Disconnect this device**, or **Disconnect all devices**.
+- On the laptop: type **D** in the black window (all devices). Closing the window stops Laptop Remote (until the
+  next sign-in).
+- To remove it completely: double-click **`uninstall.bat`** in `%LOCALAPPDATA%\LaptopRemote\app` (or in the
+  project folder), or use **Remove Laptop Remote from the laptop** in the app. Then the folder can be deleted.
+- A device that is not used for **180 days** is disconnected automatically (`forget_anywhere_after_days`, section 13).
+
+### So that the laptop can always be reached
+
+- It must be **on, with internet**, and **someone must be signed in to Windows**: Laptop Remote starts at sign-in,
+  not on the sign-in screen. After a **Restart** from far away, a laptop with a password waits on the sign-in screen
+  until someone signs in (the app warns about this). With Windows set to sign in automatically, it comes back by itself.
+- **On its charger it does not go to sleep by itself** while Laptop Remote runs (`keep_awake`, section 13). On battery
+  Windows' normal sleep settings apply. **Closing the lid** usually still makes it sleep: leave it open, or set
+  Control Panel → **Power Options** → **Choose what closing the lid does** → **Plugged in: Do nothing**.
+- After it was off or offline, it leaves its new address within a minute of starting; the app then finds it.
+
+### Good to know
+
+- Free services in between, no accounts needed: **GitHub Pages** (the app's page), a **Cloudflare quick tunnel**
+  (the connection) and **ntfy.sh** (the encrypted address notes, kept there for about 12 hours). Like any website,
+  they see that someone uses them and from which internet address, but only locked data.
+- Cloudflare's quick tunnels are made for trying things out, with no uptime guarantee. If it stops working, starting
+  Laptop Remote again gets a new tunnel.
+- The setup needs Windows 10 version 1803 (April 2018) or newer: it uses Windows' own `curl` and `tar`.
+- Don't want it at all? `anywhere = no` in `config.ini`: then Laptop Remote works only at home, as in sections 3–6.
+
+## 9. Away from home without the app: hotspot or Tailscale
 
 **Without home Wi-Fi — the phone's hotspot** (no extra programs):
 1. Turn on the hotspot on the phone and connect the laptop to it.
@@ -240,7 +371,8 @@ each laptop you want to control.
 
 The laptop then uses the phone's mobile data for its own internet. On Android, USB tethering (cable) works the same way.
 
-**From anywhere over the internet (5G, another Wi-Fi) — Tailscale: the best setup**
+**From anywhere over the internet (5G, another Wi-Fi) — Tailscale** (the app from section 8 is simpler; Tailscale
+is another good way, if you already use it)
 
 When the phone is on 5G, your home router lets nobody in from outside, so something has to connect the phone and the
 laptop. Tailscale does that: it makes a private, **encrypted** network of your own devices, without changing anything on
@@ -267,12 +399,12 @@ has to run on it. Only devices signed in to **your** Tailscale account are let i
 
 Without step 3 you can still use Tailscale: open the address that starts with `100.` (also shown in the window) and
 type a code once. If that `100.…` address doesn't open, Windows may count the Tailscale network as public: allow the
-remote on it as in section 10, or make it private (section 11 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
+remote on it as in section 11, or make it private (section 12 — its name in `Get-NetConnectionProfile` is usually "Tailscale").
 
 Don't open a port on your router to reach the remote from the internet: then anyone could try to reach it.
-Use Tailscale instead.
+Use control from anywhere (section 8) or Tailscale instead.
 
-## 9. Add your own apps and websites
+## 10. Add your own apps and websites
 
 Open `config.ini`: right-click → **Open with** → **Notepad**. Find the `[programs]` section:
 
@@ -308,7 +440,7 @@ Movies = D:\Movies
   window and on the phone.
 - The phone can open **only what is on this list**.
 
-## 10. Windows Firewall — allow it only on private networks
+## 11. Windows Firewall — allow it only on private networks
 
 The firewall has to let the phone connect to the laptop. Allow it **only on private (home) networks**.
 
@@ -338,9 +470,9 @@ stronger than an allowing rule). Press **Windows + R**, type `wf.msc`, open **In
 
 > If your antivirus has its own firewall (ESET, Kaspersky, Bitdefender, Norton…), allow Python there (home network only).
 
-## 11. Make your network "private"
+## 12. Make your network "private"
 
-The permission from section 10 only works if your home Wi-Fi is marked as **private** in Windows.
+The permission from section 11 only works if your home Wi-Fi is marked as **private** in Windows.
 
 - **Windows 11:** Start → Settings → Network & internet → Wi-Fi → click your network → **Network profile type: Private network**.
 - **Windows 10:** Start → Settings → Network & Internet → Wi-Fi → click your network → **Network profile: Private**.
@@ -349,7 +481,7 @@ The permission from section 10 only works if your home Wi-Fi is marked as **priv
 
 > Don't set a café, hotel or airport network to private. The remote is meant not to work there.
 
-## 12. Other settings
+## 13. Other settings
 
 In `config.ini`, section `[server]`. After a change, stop the remote and start it again.
 
@@ -359,12 +491,15 @@ In `config.ini`, section `[server]`. After a change, stop the remote and start i
 | `port = 8765` | The port. Change it only if it is taken (then also in the firewall rule from option C). |
 | `volume_step = 1` | How much one tap changes the volume: 1 = 2%, 2 = 4%… up to 10. |
 | `forget_phones_after_days = 30` | A phone not used for this many days is disconnected automatically. `0` = never. |
-| `tailscale_auto_connect = yes` | Devices signed in to your Tailscale account open the secure link with no code (section 8). `no` = they need a code too. |
+| `forget_anywhere_after_days = 180` | The same for devices that control the laptop from anywhere (section 8). `0` = never. |
+| `tailscale_auto_connect = yes` | Devices signed in to your Tailscale account open the secure link with no code (section 9). `no` = they need a code too. |
+| `anywhere = yes` | Control from anywhere through the encrypted tunnel (section 8). `no` = only at home. |
+| `keep_awake = yes` | While Laptop Remote runs and the laptop is on its charger, it does not go to sleep by itself. `no` = Windows' normal sleep settings. |
 
 The connected phones are stored in `devices.json` in the project folder. It holds only a fingerprint of each
 phone's key, not the key itself. Deleting the file disconnects all phones.
 
-## 13. Start automatically with Windows
+## 14. Start automatically with Windows
 
 After **Restart** from the phone, the remote does not start again by itself. To make it start whenever you sign in:
 
@@ -372,25 +507,30 @@ After **Restart** from the phone, the remote does not start again by itself. To 
 2. Right-click `start.bat` → **Create shortcut** (Windows 11: under **Show more options**).
 3. Drag the shortcut into the **Startup** folder.
 
+A laptop set up from an invitation (section 8) does this by itself.
+
 The remote starts when you sign in to Windows (not on the sign-in screen itself). Its window is always visible
 on the laptop — the remote never runs hidden.
 
-## 14. Update to a new version
+## 15. Update to a new version
 
-**Double-click `update.bat`.** It stops the remote if it runs, downloads the newest version from GitHub and replaces the
+**A laptop set up from an invitation:** in the app, **Settings → Update Laptop Remote on the laptop** — from anywhere.
+(Or start the setup file on the laptop again; nobody loses access.)
+
+**Otherwise, double-click `update.bat`.** It stops the remote if it runs, downloads the newest version from GitHub and replaces the
 program files. Your `config.ini` (apps and settings) and `devices.json` (connected phones) are kept. Then start the remote
 again with `start.bat`.
 
 (If you have a very old copy without `update.bat`, download the ZIP again as in section 2 and copy your `config.ini`
 into the new folder.)
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
 **The phone can't open the page (it keeps loading, or "site can't be reached"):**
 - Is the remote running on the laptop (black window, or the VS Code terminal)?
 - Is the phone on the same Wi-Fi (not mobile data, not a "guest" network)? Is a VPN on? Turn it off.
-- Check the firewall ([section 10](#10-windows-firewall--allow-it-only-on-private-networks)), especially the part
-  about "Cancel", and that the network is private ([section 11](#11-make-your-network-private)).
+- Check the firewall ([section 11](#11-windows-firewall--allow-it-only-on-private-networks)), especially the part
+  about "Cancel", and that the network is private ([section 12](#12-make-your-network-private)).
 - Try the other addresses the window shows. Some routers have "AP isolation" / "Client isolation" turned on,
   which hides devices from each other — turn it off in the router.
 
@@ -436,7 +576,21 @@ normal programs control it. Then also start `start.bat` with right-click → **R
 
 **A shutdown started by accident:** within 5 seconds, on the laptop press **Windows + R**, type `shutdown /a`, press **Enter**.
 
-## 16. Security
+**From anywhere (section 8):**
+- **"… is not online" / "No connection to the laptop":** the laptop is off, asleep (lid closed?), without internet,
+  or nobody is signed in to Windows. Laptop Remote must be running there. After it starts, wait a minute and tap
+  **Try again**.
+- **The app waits for the laptop, but nothing comes:** keep the app open (it checks every 10 seconds), or open it again
+  later — the invitation waits for 7 days. On the laptop, the black window shows what happens (lines starting with
+  `Anywhere:`). Without a question "Allow …?" on the laptop, the invitation did not arrive there: send it again.
+- **The setup says "Something did not work":** check the internet on the laptop and start the setup file again.
+  Antivirus programs sometimes block downloads or `cloudflared.exe`: allow them there.
+- **"The clock of the phone and of the laptop differ by more than 10 minutes":** set both to the automatic time.
+- **"This invitation was already used":** make a new invitation for each new device.
+- **"This device was disconnected":** someone disconnected it (Settings or **D** on the laptop), or it was not used for
+  180 days. Add the laptop again with a new invitation.
+
+## 17. Security
 
 **Why the browser says "Not Secure" / "not encrypted":** addresses that start with `http://` (like `http://192.168.1.23:8765`)
 are not encrypted by the browser.
@@ -445,8 +599,24 @@ are not encrypted by the browser.
   home the risk is small. On a public Wi-Fi it would be real — that's why the remote works only on private networks.
 - **With Tailscale** (`http://100.…`) the connection **is** encrypted by Tailscale; the browser just doesn't know it, so it
   still shows the warning.
-- **With the secure link** (`https://….ts.net`, section 8) it is encrypted twice (Tailscale + https with a real
+- **With the secure link** (`https://….ts.net`, section 9) it is encrypted twice (Tailscale + https with a real
   certificate), the browser shows the padlock and no warning. This is the best way.
+
+**From anywhere (section 8)** the app and the laptop encrypt everything end to end:
+- Each device gets its own random 256-bit key from the laptop. Requests and answers are locked with **AES-256-GCM**
+  (keys derived with HKDF-SHA256). A request that was changed, copied and sent again (replay), or locked with a wrong
+  key, is refused; 5 attempts with a wrong key block the sender for 5 minutes.
+- The key reaches the device locked with **ECDH (P-256)**: the invitation holds only the device's public key, so a copy of
+  the e-mail is of no use. The laptop sends the key only after **Yes** on the laptop, or after a device that already has
+  access confirms it in **Give another device access**.
+- From the internet, the laptop accepts only these encrypted requests (`/e2e`) — nothing else works through the tunnel.
+  A laptop set up from an invitation does not listen on the home network at all.
+- Cloudflare and ntfy.sh see only locked data. The keys are stored only on the laptop (`devices.json`) and in the
+  browser of each device (its storage for the app's page).
+- The app's page comes from GitHub Pages, so whoever can change this GitHub project could change the app. Protect the
+  GitHub account with a strong password and two-factor authentication.
+- On the laptop, the window shows every action from every device, and its title says **"SCREEN IS BEING VIEWED"** while
+  someone watches the screen.
 
 **What else protects you:**
 - **No PIN to guess.** A phone connects with a code (or link) that works **once**, for **15 minutes**; then it gets its own
